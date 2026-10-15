@@ -10,14 +10,14 @@ Update ka tarika: **GitHub par push → server par ek command** (`bash scripts/d
 
 ## 0. Code GitHub par (aapke PC se, ek baar)
 
-GitHub par **private** repo banayein, jaise `mgsf_v2`. PC par `mgsf_v2` folder mein:
+Repo: `https://github.com/Lalitkumar6458/mgsf_v2_web_panel` — GitHub → repo → Settings → (neeche) **Change visibility → Private** kar dein (trust ka code public na rahe). PC par `mgsf_v2` folder mein:
 
 ```bash
 git init
 git add .
 git commit -m "MGSF v2"
 git branch -M main
-git remote add origin https://github.com/CHANGE_ME/mgsf_v2.git
+git remote add origin https://github.com/Lalitkumar6458/mgsf_v2_web_panel.git
 git push -u origin main
 ```
 
@@ -102,7 +102,7 @@ Ye line copy karke GitHub → repo → **Settings → Deploy keys → Add deploy
 
 ```bash
 ssh -o StrictHostKeyChecking=accept-new -T git@github.com     # "successfully authenticated" aaye
-git clone git@github.com:CHANGE_ME/mgsf_v2.git /opt/mgsf_v2
+git clone git@github.com:Lalitkumar6458/mgsf_v2_web_panel.git /opt/mgsf_v2
 cd /opt/mgsf_v2
 mkdir -p data/uploads backups
 cp .env.example .env

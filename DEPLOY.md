@@ -44,7 +44,7 @@ docker --version && docker compose version   # dono chalne chahiye
 **Tarika A — GitHub (behtar, update aasaan):** `mgsf_v2` ko ek **private** GitHub repo mein push karein (`.env`, `node_modules`, `.next`, `data`, `backups`, `uploads`, `firebase-service-account.json` push **nahi** honge — `.gitignore` mein hain). Phir server par:
 
 ```bash
-cd /opt && git clone https://github.com/<aap>/mgsf_v2.git && cd mgsf_v2
+cd /opt && git clone https://github.com/Lalitkumar6458/mgsf_v2_web_panel.git && cd mgsf_v2
 ```
 
 **Tarika B — WinSCP / FileZilla:** `mgsf_v2` folder zip karein (bina `node_modules`, `.next`, `data`, `.env`), `/opt/mgsf_v2` mein upload karke `unzip` karein.

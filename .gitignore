@@ -12,3 +12,8 @@ firebase-service-account.json
 /.release
 /.release.new
 /.release.old
+# member data exports / database dumps — never on GitHub
+/backup-firestore*.json
+/*.sql
+/*.sql.gz
+/*.dump
