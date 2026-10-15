@@ -1,8 +1,7 @@
-import CertificateViewer from '@/components/pdfcom/Certificates';
-import Certificate from '@/components/pdfcom/Certificates/CertificateCom';
-import CertificateServerSide from '@/components/pdfcom/Certificates/CertificateComServerSide';
+import CertificateViewer, { CertificateDocument } from '@/components/pdfcom/Certificates';
+import { useCertificateTemplate } from '@/lib/client/useCertificateTemplate';
 import { PDFDownloadLink } from '@react-pdf/renderer';
-import { Button, Drawer, Space, Typography } from 'antd'
+import { Button, Drawer, Space, Spin, Typography } from 'antd'
 import React from 'react'
 import { useSelector } from 'react-redux';
 
@@ -19,6 +18,9 @@ const MemberCertificateCom = ({
 
  const TrustData = useSelector((state) => state.data.trustData);
     const memberAgent=agentList.find((x)=>x.id===memberData?.agentId)
+    // the trust's Certificate Builder design for this yojna (null → built-in certificate)
+    const { loading: tplLoading, template } = useCertificateTemplate(selectedProgram?.id, open);
+    const certData = { ...memberData, agentName: memberData?.agentName || memberAgent?.displayName, agentPhone: memberAgent?.phone };
   return (
     <div>
         <Drawer
@@ -43,14 +45,16 @@ const MemberCertificateCom = ({
                 borderRadius:"4px",
                 fontSize:"16px",
                 cursor:"pointer",
-            }} fileName={fileName} document={<CertificateServerSide data={{...memberData,agentPhone:memberAgent?.phone}} selectedProgram={selectedProgram} />} >
+            }} fileName={fileName} document={<CertificateDocument memberData={certData} selectedProgram={selectedProgram} TrustData={TrustData} template={template} />} >
                 Download Pdf
             </PDFDownloadLink>
          
           </Space>
         }
       > 
-      <CertificateViewer memberData={{...memberData,agentPhone:memberAgent?.phone}} selectedProgram={selectedProgram} TrustData ={TrustData}/>
+      {tplLoading ? <div style={{ padding: 64, textAlign: 'center' }}><Spin /></div> : (
+        <CertificateViewer memberData={certData} selectedProgram={selectedProgram} TrustData={TrustData} template={template} />
+      )}
       </Drawer>
     </div>
   )

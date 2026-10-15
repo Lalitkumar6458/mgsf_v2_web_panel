@@ -96,6 +96,7 @@ export function apiPermission(method, pathname) {
   if (is(/^\/(auth|health|upload|files|notifications|email-send|owner)(\/|$)/)) return null;
   if (is(/^\/trust\/public$/)) return null;
   if (is(/^\/trust$/)) return read ? null : { module: "settings", action: "edit" };
+  if (is(/^\/trust\/theme$/)) return read ? null : { module: "settings", action: "edit" };
   if (is(/^\/programs$/) || is(/^\/programs\/[^/]+$/)) return read ? null : { module: "yojna", action: act };
   if (is(/^\/master-data(\/|$)/)) return read ? null : { module: "master", action: act };
   if (is(/^\/(users|roles)(\/|$)/)) return { module: "users", action: act };
@@ -131,7 +132,10 @@ export function apiPermission(method, pathname) {
   if (is(/^\/transactions\/[^/]+\/reverse$/)) return { module: "payments", action: "delete" };
   if (is(/^\/join-fees\/[^/]+$/)) return { module: "payments", action: "delete" };
   if (is(/^\/programs\/[^/]+\/(payments|join-fees|receipts)$/) || is(/^\/payments\/process$/)) return { module: "payments", action: "add" };
-  if (is(/^\/programs\/[^/]+\/transactions$/) || is(/^\/payments\/fetch$/) || is(/^\/receipts(\/|$)/)) return { module: "payments", action: "view" };
+  if (is(/^\/programs\/[^/]+\/transactions(\/report)?$/) || is(/^\/payments\/fetch$/) || is(/^\/receipts(\/|$)/)) return { module: "payments", action: "view" };
+  // certificate builder: designing = trust settings; printing a member's certificate = member screens
+  if (is(/^\/certificate-templates\/active$/)) return { any: [["members", "view"], ["payments", "view"], ["agents", "view"]] };
+  if (is(/^\/certificate-templates(\/|$)/)) return { module: "settings", action: read ? "view" : "edit" };
   if (is(/^\/(rasid-generate|all-payment-pdf|certificate-send)$/)) return { any: [["payments", "view"], ["members", "view"], ["agents", "view"]] };
 
   // anything new that is not mapped yet: staff need edit rights on settings (super admin always passes)

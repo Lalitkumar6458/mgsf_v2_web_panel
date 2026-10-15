@@ -14,7 +14,7 @@ import {
 } from '@ant-design/icons';
 import {
     Avatar, Button, Dropdown, Tag, Tooltip, Select, Checkbox, Popover,
-    DatePicker, Badge, message, Input, App, Empty
+    DatePicker, Badge, message, Input, App, Empty, Drawer, Segmented
 } from 'antd';
 import {
     FiSearch, FiDownload, FiFileText, FiPrinter, FiColumns, FiSliders, FiX, FiRefreshCw,
@@ -272,8 +272,9 @@ const MemberList = () => {
         f.addedBy !== 'all' && { k: 'addedBy', label: f.addedBy === 'agent' ? 'Added by agent' : 'Added by admin' },
         f.kist !== undefined && { k: 'kist', label: `Kist ₹${f.kist}` },
     ].filter(Boolean);
-    const moreCount = ['ageGroup', 'state', 'district', 'village', 'kist'].filter((k) => f[k] !== undefined).length + (f.addedBy !== 'all' ? 1 : 0);
     const clearChip = (k) => set(k, EMPTY_FILTERS[k]);
+    const activeFilters = chips.filter((c) => c.k !== 'q').length;
+    const [filtersOpen, setFiltersOpen] = useState(false);
 
     const filterSummary = [
         TABS.find((t) => t.key === tab)?.label + ' members',
@@ -569,36 +570,6 @@ const MemberList = () => {
         </div>
     );
 
-    const moreFilters = (
-        <div className="w-72 space-y-3">
-            {[
-                ['ageGroup', 'Age group', options.ageGroup],
-                ['state', 'State', options.state],
-                ['district', 'District', options.district],
-                ['village', 'Village', options.village],
-            ].map(([k, label, opts]) => (
-                <div key={k}>
-                    <div className="text-xs font-semibold text-gray-500 mb-1">{label}</div>
-                    <Select allowClear showSearch className="w-full" placeholder={`Any ${label.toLowerCase()}`} value={f[k]}
-                        onChange={(v) => { set(k, v); if (k === 'state') set('district', undefined); }}
-                        options={opts.map((o) => ({ value: o, label: o }))} />
-                </div>
-            ))}
-            <div className="grid grid-cols-2 gap-2">
-                <div>
-                    <div className="text-xs font-semibold text-gray-500 mb-1">Added by</div>
-                    <Select className="w-full" value={f.addedBy} onChange={(v) => set('addedBy', v)}
-                        options={[{ value: 'all', label: 'Anyone' }, { value: 'admin', label: 'Admin' }, { value: 'agent', label: 'Agent' }]} />
-                </div>
-                <div>
-                    <div className="text-xs font-semibold text-gray-500 mb-1">Kist (₹)</div>
-                    <Select allowClear className="w-full" placeholder="Any" value={f.kist} onChange={(v) => set('kist', v)}
-                        options={options.kist.map((o) => ({ value: o, label: `₹${o}` }))} />
-                </div>
-            </div>
-        </div>
-    );
-
     const exportMenu = {
         items: [
             { key: 'pdf', icon: <FiFileText />, label: 'Download PDF (choose columns)' },
@@ -646,29 +617,19 @@ const MemberList = () => {
             {/* ── Filters ──────────────────────────────────────────────────── */}
             <div className="mm-card p-3 space-y-2.5">
                 <div className="flex flex-wrap items-center gap-2">
-                    <Input allowClear prefix={<FiSearch className="text-gray-400" />} placeholder="Search name, reg no, father, phone, village, Aadhaar…"
+                    <Input allowClear size="large" prefix={<FiSearch className="text-gray-400" />} placeholder="Naam, reg no, pita, phone, gaon, Aadhaar se khojein…"
                         value={f.q} onChange={(e) => set('q', e.target.value)} className="mm-search" />
-                    <Select allowClear showSearch optionFilterProp="label" placeholder="All agents" value={f.agent} onChange={(v) => set('agent', v)}
-                        style={{ minWidth: 170 }}
-                        options={[{ value: '__none', label: 'No agent (admin)' }, ...(agentsList || []).map((a) => ({ value: a.id, label: a.displayName || a.id }))]} />
-                    <Select value={f.gender} onChange={(v) => set('gender', v)} style={{ width: 125 }}
-                        options={[{ value: 'all', label: 'All genders' }, { value: 'male', label: 'Male' }, { value: 'female', label: 'Female' }]} />
-                    <Select value={f.fees} onChange={(v) => set('fees', v)} style={{ width: 160 }}
-                        options={[{ value: 'all', label: 'Join fees: all' }, { value: 'paid', label: 'Join fees paid' }, { value: 'pending', label: 'Join fees pending' }]} />
-                    <Select value={f.dues} onChange={(v) => set('dues', v)} style={{ width: 150 }}
-                        options={[{ value: 'all', label: 'Dues: all' }, { value: 'has', label: 'Has pending dues' }, { value: 'none', label: 'No dues' }]} />
-                    <RangePicker value={f.joinRange} onChange={(v) => set('joinRange', v)} format="DD-MM-YYYY" presets={DATE_PRESETS}
-                        placeholder={['Joined from', 'Joined to']} allowClear style={{ width: 250 }} />
-                    <Popover trigger="click" placement="bottomLeft" content={moreFilters} title="More filters">
-                        <Badge count={moreCount} size="small" color="#2a78d6">
-                            <Button icon={<FiSliders />}>More filters</Button>
-                        </Badge>
-                    </Popover>
+                    <Badge count={activeFilters} size="small" offset={[-4, 4]}>
+                        <Button size="large" icon={<FiSliders />} onClick={() => setFiltersOpen(true)}
+                            className={activeFilters ? 'mm-fbtn-on' : ''}>
+                            Filters
+                        </Button>
+                    </Badge>
                     <div className="flex-1" />
                     <Popover trigger="click" placement="bottomRight" content={columnChooser}>
-                        <Button icon={<FiColumns />}>Columns</Button>
+                        <Tooltip title="Columns"><Button size="large" icon={<FiColumns />} /></Tooltip>
                     </Popover>
-                    <Tooltip title="Reload"><Button icon={<FiRefreshCw className={isLoading ? 'animate-spin' : ''} />} onClick={onGridReady} /></Tooltip>
+                    <Tooltip title="Reload"><Button size="large" icon={<FiRefreshCw className={isLoading ? 'animate-spin' : ''} />} onClick={onGridReady} /></Tooltip>
                 </div>
                 {chips.length > 0 && (
                     <div className="flex flex-wrap items-center gap-1.5">
@@ -677,6 +638,80 @@ const MemberList = () => {
                     </div>
                 )}
             </div>
+
+            {/* ── Filters drawer ───────────────────────────────────────────── */}
+            <Drawer
+                title={<div className="flex items-center gap-2"><FiSliders /> Filters</div>}
+                open={filtersOpen}
+                onClose={() => setFiltersOpen(false)}
+                width={400}
+                styles={{ body: { paddingTop: 12 } }}
+                footer={
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-600"><b>{filteredMembersData.length.toLocaleString('en-IN')}</b> members milte hain</span>
+                        <div className="flex-1" />
+                        <Button onClick={() => setF((cur) => ({ ...EMPTY_FILTERS, q: cur.q }))} disabled={!activeFilters}>Clear all</Button>
+                        <Button type="primary" onClick={() => setFiltersOpen(false)}>Dekhein</Button>
+                    </div>
+                }
+            >
+                <div className="mm-fsec">
+                    <div className="mm-flabel">Agent</div>
+                    <Select allowClear showSearch optionFilterProp="label" placeholder="Sabhi agents" value={f.agent} onChange={(v) => set('agent', v)}
+                        className="w-full" options={[{ value: '__none', label: 'Bina agent (admin)' }, ...(agentsList || []).map((a) => ({ value: a.id, label: a.displayName || a.id }))]} />
+                </div>
+                <div className="mm-fsec">
+                    <div className="mm-flabel">Gender</div>
+                    <Segmented block value={f.gender} onChange={(v) => set('gender', v)}
+                        options={[{ value: 'all', label: 'Sabhi' }, { value: 'male', label: 'Male' }, { value: 'female', label: 'Female' }]} />
+                </div>
+                <div className="mm-fsec">
+                    <div className="mm-flabel">Join fees</div>
+                    <Segmented block value={f.fees} onChange={(v) => set('fees', v)}
+                        options={[{ value: 'all', label: 'Sabhi' }, { value: 'paid', label: 'Jama' }, { value: 'pending', label: 'Baki' }]} />
+                </div>
+                <div className="mm-fsec">
+                    <div className="mm-flabel">Closing dues</div>
+                    <Segmented block value={f.dues} onChange={(v) => set('dues', v)}
+                        options={[{ value: 'all', label: 'Sabhi' }, { value: 'has', label: 'Baki hai' }, { value: 'none', label: 'Koi baki nahi' }]} />
+                </div>
+                <div className="mm-fsec">
+                    <div className="mm-flabel">Join date</div>
+                    <RangePicker value={f.joinRange} onChange={(v) => set('joinRange', v)} format="DD-MM-YYYY" presets={DATE_PRESETS}
+                        placeholder={['Se', 'Tak']} allowClear className="w-full" />
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                        {DATE_PRESETS.map((p) => (
+                            <button key={p.label} type="button" className="mm-qchip" onClick={() => set('joinRange', p.value)}>{p.label}</button>
+                        ))}
+                    </div>
+                </div>
+                <div className="mm-fdiv">Aur filters</div>
+                <div className="grid grid-cols-2 gap-x-3">
+                    {[
+                        ['ageGroup', 'Age group', options.ageGroup],
+                        ['state', 'State', options.state],
+                        ['district', 'District', options.district],
+                        ['village', 'Village', options.village],
+                    ].map(([k, label, opts]) => (
+                        <div key={k} className="mm-fsec">
+                            <div className="mm-flabel">{label}</div>
+                            <Select allowClear showSearch className="w-full" placeholder="Sabhi" value={f[k]}
+                                onChange={(v) => { set(k, v); if (k === 'state') set('district', undefined); }}
+                                options={opts.map((o) => ({ value: o, label: o }))} />
+                        </div>
+                    ))}
+                    <div className="mm-fsec">
+                        <div className="mm-flabel">Kisne joda</div>
+                        <Select className="w-full" value={f.addedBy} onChange={(v) => set('addedBy', v)}
+                            options={[{ value: 'all', label: 'Koi bhi' }, { value: 'admin', label: 'Admin' }, { value: 'agent', label: 'Agent' }]} />
+                    </div>
+                    <div className="mm-fsec">
+                        <div className="mm-flabel">Kist (₹)</div>
+                        <Select allowClear className="w-full" placeholder="Sabhi" value={f.kist} onChange={(v) => set('kist', v)}
+                            options={options.kist.map((o) => ({ value: o, label: `₹${o}` }))} />
+                    </div>
+                </div>
+            </Drawer>
 
             {/* ── Summary / selection bar ──────────────────────────────────── */}
             {selectedRows.length > 0 ? (
@@ -806,18 +841,24 @@ const MM_CSS = `
 .mm-title { font-size: 22px; font-weight: 800; color: #0b0b0b; letter-spacing: -0.02em; }
 .mm-sub { font-size: 13px; color: #52514e; margin-top: 2px; }
 .mm-card { background: #fff; border: 1px solid rgba(11,11,11,0.08); border-radius: 14px; box-shadow: 0 1px 2px rgba(0,0,0,0.03); }
-.mm-search { width: 300px; max-width: 100%; }
+.mm-search { flex: 1 1 320px; max-width: 560px; }
+.mm-fsec { margin-bottom: 16px; }
+.mm-fbtn-on.ant-btn { border-color: var(--brand, #2563eb) !important; color: var(--brand, #2563eb) !important; background: var(--brand-50, #eef4fd) !important; font-weight: 600; }
+.mm-flabel { font-size: 12px; font-weight: 600; color: #57534e; margin-bottom: 6px; }
+.mm-fdiv { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #a8a29e; margin: 22px 0 12px; padding-top: 14px; border-top: 1px solid #f0efed; }
+.mm-qchip { font-size: 12px; padding: 3px 10px; border-radius: 999px; border: 1px solid #e7e5e4; background: #fafaf9; color: #44403c; cursor: pointer; }
+.mm-qchip:hover { border-color: var(--brand, #2563eb); color: var(--brand, #2563eb); }
 @media (max-width: 640px) { .mm-search { width: 100%; } }
 .mm-tabs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: thin; }
 .mm-tab { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; padding: 7px 12px; border-radius: 999px; font-size: 13px; font-weight: 600; color: #52514e; background: #fff; border: 1px solid rgba(11,11,11,0.10); transition: all .15s; }
-.mm-tab:hover { border-color: rgba(42,120,214,0.45); color: #0b0b0b; }
-.mm-tab-on { background: #0b0b0b; color: #fff; border-color: #0b0b0b; }
+.mm-tab:hover { border-color: var(--brand, #2a78d6); color: #0b0b0b; }
+.mm-tab-on { background: var(--brand, #0b0b0b); color: #fff; border-color: var(--brand, #0b0b0b); box-shadow: 0 2px 6px color-mix(in srgb, var(--brand, #000) 25%, transparent); }
 .mm-tab-on:hover { color: #fff; }
 .mm-count { font-size: 11.5px; font-weight: 700; padding: 1px 7px; border-radius: 999px; background: rgba(11,11,11,0.06); font-variant-numeric: tabular-nums; }
 .mm-tab-on .mm-count { background: rgba(255,255,255,0.18); }
 .mm-dot { width: 7px; height: 7px; border-radius: 999px; display: inline-block; flex-shrink: 0; }
 .mm-pill { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600; padding: 2px 8px; border-radius: 999px; line-height: 18px; }
-.mm-chip { border-radius: 999px !important; padding: 2px 10px !important; background: #eef4fd !important; border-color: #cfe0f7 !important; color: #1c5cab !important; }
+.mm-chip { border-radius: 999px !important; padding: 2px 10px !important; background: var(--brand-50, #eef4fd) !important; border-color: var(--brand-200, #cfe0f7) !important; color: var(--brand-700, #1c5cab) !important; margin: 0 !important; }
 .mm-summary { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 12.5px; color: #52514e; padding: 0 4px; }
 .mm-selbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; font-size: 13px; padding: 8px 12px; border-radius: 12px; background: #eef4fd; border: 1px solid #cfe0f7; color: #1c5cab; }
 .mm-grid .ag-cell { display: flex; align-items: center; }

@@ -3,9 +3,12 @@ import { sql } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { forbidden } from "./errors.js";
 
-/** Admin (or owner) only. */
+export const OWNER_NO_TRUST = "Owner login ke saath koi trust nahi juda — ye kaam trust ke admin login se karein.";
+
+/** Admin (or owner) only. Trust work needs a trust: an owner login without one gets a clear message. */
 export function adminOnly(auth) {
   if (auth.role !== "admin" && auth.role !== "owner") throw forbidden("Admin only");
+  if (!auth.adminId) throw forbidden(OWNER_NO_TRUST);
 }
 
 /** Agents may only act on their own members. */

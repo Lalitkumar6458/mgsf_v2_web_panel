@@ -11,6 +11,8 @@ import {
   FiTrendingUp, FiCalendar, FiAlertCircle, FiPercent, FiCreditCard, FiSearch, FiArrowRight,
 } from "react-icons/fi";
 import { api } from "@/lib/client/api";
+import { useAuth } from "@/lib/AuthProvider";
+import { describeCountDisplay } from "@/lib/memberCountDisplay";
 import dayjs from "dayjs";
 import { amountsHidden, useAmountsHidden, AmountsEye, MASK } from "@/lib/client/privacy";
 
@@ -201,6 +203,8 @@ export default function AdvancedDashboard({ refreshKey = 0 }) {
   const { message } = App.useApp();
   useAmountsHidden(); // re-render when amounts are shown / hidden
   const router = useRouter();
+  const { user } = useAuth();
+  const isSuper = !user?.access || user.access.isSuper; // trust owner sees the real count under the shown one
   const program = useSelector((s) => s.data.selectedProgram);
   const agentsList = useSelector((s) => s.data.agentsList);
   const [agentId, setAgentId] = useState(undefined);
@@ -340,8 +344,11 @@ export default function AdvancedDashboard({ refreshKey = 0 }) {
         <div className="kpi-grid">{[0, 1, 2, 3, 4, 5].map((i) => <Skel key={i} h={104} />)}</div>
       ) : (
         <div className="kpi-grid">
-          <Kpi emphasis icon={FiUsers} label="Total Members" value={num(m.onBooks)} color={C.ink2}
-            sub={`${num(m.joinedThisMonth)} joined this month`} onClick={() => router.push("/members")} />
+          <Kpi emphasis icon={FiUsers} label="Total Members" value={num(m.display ?? m.onBooks)} color={C.ink2}
+            sub={m.countDisplay && m.countDisplay.mode !== "actual" && isSuper
+              ? `Asli ${num(m.onBooks)} · ${describeCountDisplay(m.countDisplay)}`
+              : `${num(m.joinedThisMonth)} joined this month`}
+            onClick={() => router.push("/members")} />
           {STATES.map((s) => (
             <Kpi key={s.key} icon={s.icon} label={s.label} value={num(m[s.key])} color={s.color}
               sub={`${pct(m[s.key], m.onBooks)}% of members${s.key === "closed" && m.closedThisMonth ? ` · ${m.closedThisMonth} this month` : ""}`}

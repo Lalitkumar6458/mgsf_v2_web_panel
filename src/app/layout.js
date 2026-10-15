@@ -2,26 +2,22 @@
 // Geist fonts bundled locally (no Google Fonts download at build time)
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
-import { ConfigProvider, App } from 'antd';
+import { App } from 'antd';
 import "./globals.css";
 import CustomDashboardLayout from "@/components/base/Layout";
 import { AuthProvider } from "@/lib/AuthProvider";
 import Providers from "@/components/base/providers";
 import StoreProvider from "../../StoreProvider";
+import { ThemeProvider } from "@/lib/theme/ThemeProvider";
+import { buildTheme, DEFAULT_THEME } from "@/lib/theme/themes";
 
 const geistSans = GeistSans;
 const geistMono = GeistMono;
 
-// Custom AntD theme configuration
-const theme = {
-  token: {
-    colorPrimary: '#1d4ed8',
-    colorSuccess: '#059669',
-    colorWarning: '#d97706',
-    colorError: '#dc2626',
-    colorInfo: '#2563eb',
-  },
-};
+// Colours come from the trust's theme (Settings → Theme, lib/theme). The default theme is in the
+// HTML; the script below swaps in the last used theme before the page paints (no colour flash).
+const defaultVars = buildTheme(DEFAULT_THEME).vars;
+const noFlash = `try{var c=localStorage.getItem('mgsf.theme.css');if(c){c.split(';').forEach(function(p){var i=p.indexOf(':');if(i>0)document.documentElement.style.setProperty(p.slice(0,i),p.slice(i+1))})}}catch(e){}`;
 
 export const metadata = {
   title: "Trust Manager | Admin Panel",  // replaced by the trust name once Settings → Organization is loaded
@@ -30,11 +26,14 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
+    <html lang="en" style={defaultVars} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: noFlash }} />
+      </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <AuthProvider>
           <StoreProvider>
-          <ConfigProvider theme={theme}>
+          <ThemeProvider>
             <App>
                 <Providers>
               <CustomDashboardLayout>
@@ -42,7 +41,7 @@ export default function RootLayout({ children }) {
               </CustomDashboardLayout>
                 </Providers>
             </App>
-          </ConfigProvider>
+          </ThemeProvider>
           </StoreProvider>
         </AuthProvider>
       </body>

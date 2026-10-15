@@ -1,3 +1,4 @@
+import { FiBriefcase } from 'react-icons/fi';
 import React, { useEffect, useState } from 'react';
 import { 
   UserOutlined, MailOutlined, PhoneOutlined, LockOutlined, 
@@ -336,14 +337,12 @@ The Team
   return (
     <div>
       <Button
-        type="primary"
         size="medium"
-        icon={<UserAddOutlined />}
+        icon={<FiBriefcase />}
         title="Add Agent"
         onClick={showAgentDrawer}
-        className="shadow-md hover:shadow-lg transition-all duration-300 !bg-amber-900"
       >
-        ADD AGENT
+        Add Agent
       </Button>
 
       <Drawer

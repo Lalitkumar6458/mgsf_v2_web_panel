@@ -1,5 +1,6 @@
 "use client";
 
+import { FiUserPlus } from 'react-icons/fi';
 import React, { useState, useEffect } from 'react';
 import { Button, Drawer, Select, Form, Input, DatePicker, Upload, Card, Row, Col, Divider, Space, Typography, App, Spin, Checkbox, Modal, AutoComplete } from 'antd';
 import {
@@ -795,11 +796,10 @@ const checkApplicationNumberDuplicate = async (appNumber, programId) => {
         onClick={() => setOpen(true)}
         title="Add Member"
         type="primary"
-        icon={<PlusOutlined />}
+        icon={<FiUserPlus />}
         size="medium"
-        className='!bg-green-700'
       >
-       ADD MEMBER
+       Add Member
       </Button>
 
       <Drawer

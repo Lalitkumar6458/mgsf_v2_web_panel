@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
+import { useQueryTab } from '@/lib/client/useQueryTab';
 import Contact from '@/components/screen/settings/Contact';
 import Organization from '@/components/screen/settings/organization';
 import UsersRoles from '@/components/screen/master/UsersRoles';
@@ -8,6 +9,9 @@ import { useCan } from '@/lib/AuthProvider';
 import Sessions from '@/components/screen/settings/Sessions';
 import PasswordChange from '@/components/screen/settings/PasswordChange';
 import RulePolicy from '@/components/screen/settings/rulePolicy';
+import dynamic from 'next/dynamic';
+const ThemeSettings = dynamic(() => import('@/components/screen/settings/ThemeSettings'), { ssr: false });
+const CertificateBuilder = dynamic(() => import('@/components/screen/settings/certificate/CertificateBuilder'), { ssr: false });
 import {
   BsBank2,
   BsShieldLock,
@@ -19,6 +23,8 @@ import {
   BsGearFill,
   BsX,
   BsList,
+  BsAward,
+  BsPalette,
 } from 'react-icons/bs';
 import { useAuth } from '@/lib/AuthProvider';
 
@@ -28,6 +34,20 @@ const menuItems = [
     icon: <BsBank2 size={18} />,
     label: 'Organization',
     description: 'Manage trust details and profile',
+    module: 'settings',
+  },
+  {
+    key: 'theme',
+    icon: <BsPalette size={18} />,
+    label: 'Theme',
+    description: 'Colours of the whole panel',
+    module: 'settings',
+  },
+  {
+    key: 'certificate',
+    icon: <BsAward size={18} />,
+    label: 'Certificate Builder',
+    description: 'Design the member certificate on your own frame',
     module: 'settings',
   },
   {
@@ -64,7 +84,8 @@ const menuItems = [
 const SettingsPage = () => {
   const can = useCan();
   const visibleItems = menuItems.filter((i) => !i.module || can(i.module));
-  const [activeTab, setActiveTab] = useState('organization');
+  // the tab lives in the URL (/setting?tab=theme) so the main sidebar's sub-menu can open it
+  const [activeTab, setActiveTab] = useQueryTab('organization', menuItems.map((i) => i.key));
   useEffect(() => {
     if (!visibleItems.find((i) => i.key === activeTab) && visibleItems[0]) setActiveTab(visibleItems[0].key);
   }, [visibleItems.length]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -104,6 +125,10 @@ const SettingsPage = () => {
         return <Organization />;
       case 'contact':
         return <Contact />;
+      case 'certificate':
+        return <CertificateBuilder />;
+      case 'theme':
+        return <ThemeSettings />;
       case 'Rules & Policies':
         return <RulePolicy />;
       case 'teams':
@@ -322,7 +347,7 @@ const SettingsPage = () => {
 
         {/* Page content */}
         <div className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
-          <div className="max-w-3xl w-full mx-auto">
+          <div className={`${['certificate', 'theme'].includes(activeTab) ? 'max-w-6xl' : 'max-w-3xl'} w-full mx-auto`}>
             {renderContent()}
           </div>
         </div>
@@ -331,4 +356,6 @@ const SettingsPage = () => {
   );
 };
 
-export default SettingsPage;
+export default function SettingsRoute() {
+  return <Suspense fallback={null}><SettingsPage /></Suspense>;
+}

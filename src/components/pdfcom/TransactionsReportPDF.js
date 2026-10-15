@@ -142,7 +142,6 @@ const S = StyleSheet.create({
     border: `1px solid ${COLORS.border}`,
     borderRadius: 4,
     marginBottom: 8,
-    overflow: 'hidden',
   },
 
   // Header row
@@ -180,9 +179,8 @@ const S = StyleSheet.create({
   td: {
     fontSize: 7.5,
     paddingHorizontal: 3,
-    paddingVertical: 3,
+    paddingVertical: 4,
     borderRight: `0.5px solid ${COLORS.border}`,
-    justifyContent: 'center',
   },
   tdLast:  { borderRight: 0 },
   tLeft:   { textAlign: 'left' },
@@ -276,7 +274,7 @@ const PageHeader = memo(({ programInfo, summary, currentDate, currentTime,TrustD
     {/* Decorative top strip */}
     <View style={S.topStrip}>
     {
-      TrustData.topTitle.map((item,index)=>(
+      (TrustData.topTitle || []).map((item,index)=>(
         <Text key={index} style={S.topText}>{item}</Text>
       ))
     }
@@ -321,7 +319,7 @@ const PageHeader = memo(({ programInfo, summary, currentDate, currentTime,TrustD
 
 // ─── Table column header row ──────────────────────────────────────────────────
 const TableHead = memo(() => (
-  <View style={S.tableHeader} fixed>
+  <View style={S.tableHeader}>
     <Text style={[S.th, { width: COL.no }]}>क्र.</Text>
     <Text style={[S.th, S.thLeft, { width: COL.trx }]}>TRX ID</Text>
     <Text style={[S.th, { width: COL.date }]}>तिथि</Text>
@@ -333,91 +331,83 @@ const TableHead = memo(() => (
   </View>
 ));
 
-// ─── Single data row — wrap={false} keeps row intact across pages ─────────────
+// ─── Single data row ──────────────────────────────────────────────────────────
+// One <Text> per cell (no wrapper Views, no font switching): each text node costs layout
+// time, and a report can have thousands of rows.
+const cell = (w, extra) => [S.td, { width: w }, extra];
 const DataRow = memo(({ t, idx }) => {
   const isEven = idx % 2 === 0;
+  const cash = t.paymentMethod === 'cash';
+  const ref = t.onlineReference ? trunc(t.onlineReference, 16) : '';
+  const note = t.note ? trunc(t.note, 18) : '';
   return (
     <View style={[S.tableRow, isEven ? S.rowEven : S.rowOdd]} wrap={false}>
-      {/* S.No */}
-      <View style={[S.td, { width: COL.no, alignItems: 'center' }]}>
-        <Text style={{ ...S.tCenter, fontSize: 7, color: '#9ca3af' }}>{idx + 1}</Text>
-      </View>
-
-      {/* TRX ID */}
-      <View style={[S.td, { width: COL.trx }]}>
-        <Text style={[S.monoText, { fontSize: 6.5, color: '#374151' }]}>
-          {trunc(t.transactionNumber, 14)}
-        </Text>
-      </View>
-
-      {/* Date */}
-      <View style={[S.td, { width: COL.date }]}>
-        <Text style={S.tCenter}>{fmtD(t.paymentDate)}</Text>
-      </View>
-
-      {/* Payer */}
-      <View style={[S.td, { width: COL.payer }]}>
-        <Text style={[S.tLeft, { fontWeight: 'bold', fontSize: 7.5 }]}>
-          {trunc(t.payerName, 18)}
-        </Text>
-        {t.payerRegistrationNumber ? (
-          <Text style={[S.subText, S.monoText]}>{t.payerRegistrationNumber}</Text>
-        ) : null}
-      </View>
-
-      {/* Beneficiary */}
-      <View style={[S.td, { width: COL.benef }]}>
-        <Text style={[S.tLeft, { fontWeight: 'bold', fontSize: 7.5 }]}>
-          {trunc(t.marriageMemberName, 18)}
-        </Text>
-        {t.marriageRegistrationNumber ? (
-          <Text style={[S.subText, S.monoText]}>{t.marriageRegistrationNumber}</Text>
-        ) : null}
-      </View>
-
-      {/* Amount */}
-      <View style={[S.td, { width: COL.amount }]}>
-        <Text style={S.amtText}>{fmt(t.amount)}</Text>
-      </View>
-
-      {/* Method pill */}
-      <View style={[S.td, { width: COL.method, alignItems: 'center' }]}>
-        <Text style={t.paymentMethod === 'cash' ? S.cashPill : S.onlinePill}>
-          {t.paymentMethod === 'cash' ? 'नकद' : 'ऑनलाइन'}
-        </Text>
-      </View>
-
-      {/* Reference / Note */}
-      <View style={[S.td, S.tdLast, { width: COL.ref }]}>
-        {t.onlineReference ? (
-          <Text style={[S.tLeft, S.monoText, { fontSize: 7 }]}>
-            {trunc(t.onlineReference, 16)}
-          </Text>
-        ) : null}
-        {t.note ? (
-          <Text style={[S.subText, { fontSize: 6.5 }]}>{trunc(t.note, 18)}</Text>
-        ) : (!t.onlineReference ? <Text style={{ color: COLORS.subText, fontSize: 7 }}>—</Text> : null)}
-      </View>
+      <Text style={cell(COL.no, { textAlign: 'center', fontSize: 7, color: '#9ca3af' })}>{idx + 1}</Text>
+      <Text style={cell(COL.trx, { fontSize: 6.5, color: '#374151' })}>{trunc(t.transactionNumber, 16)}</Text>
+      <Text style={cell(COL.date, S.tCenter)}>{fmtD(t.paymentDate)}</Text>
+      <Text style={cell(COL.payer, { fontWeight: 'bold' })}>
+        {trunc(t.payerName, 18)}
+        {t.payerRegistrationNumber ? <Text style={S.subText}>{'\n'}{t.payerRegistrationNumber}</Text> : null}
+      </Text>
+      <Text style={cell(COL.benef, { fontWeight: 'bold' })}>
+        {trunc(t.marriageMemberName, 18)}
+        {t.marriageRegistrationNumber ? <Text style={S.subText}>{'\n'}{t.marriageRegistrationNumber}</Text> : null}
+      </Text>
+      <Text style={cell(COL.amount, S.amtText)}>{fmt(t.amount)}</Text>
+      <Text style={cell(COL.method, { textAlign: 'center', fontWeight: 'bold', fontSize: 7, color: cash ? COLORS.green : COLORS.blue })}>
+        {cash ? 'नकद' : 'ऑनलाइन'}
+      </Text>
+      <Text style={cell(COL.ref, [S.tdLast, { fontSize: 7, color: ref || note ? '#374151' : COLORS.subText }])}>
+        {ref || (note ? '' : '—')}
+        {note ? <Text style={S.subText}>{ref ? '\n' : ''}{note}</Text> : null}
+      </Text>
     </View>
   );
 });
 
 // ─── Main Document ────────────────────────────────────────────────────────────
+// Rows are cut into pages here (fixed rows per page) instead of letting react-pdf flow one
+// long wrapping table: that flow is roughly quadratic — 500 rows took 16 s, 3,000 rows 6 min.
+// Cut by hand it is linear (3,000 rows ≈ a few seconds) and page numbers need no second pass.
+const ROWS_FIRST = 17;   // page 1 also carries the trust header, filters and summary cards
+const ROWS_NEXT = 25;    // later pages: a one-line header
+const ROWS_TAIL = 3;     // room the total row + notice need on the last page
+
+export function paginate(n) {
+  const pages = [];
+  let i = 0;
+  pages.push([0, Math.min(n, ROWS_FIRST)]);
+  i = pages[0][1];
+  while (i < n) { pages.push([i, Math.min(n, i + ROWS_NEXT)]); i += ROWS_NEXT; }
+  const last = pages[pages.length - 1];
+  const cap = pages.length === 1 ? ROWS_FIRST : ROWS_NEXT;
+  if (last[1] - last[0] > cap - ROWS_TAIL) pages.push([n, n]); // total + notice on a page of their own
+  return pages;
+}
+
+const MiniHeader = ({ TrustData, programInfo, page, pages }) => (
+  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${COLORS.gold}`, paddingBottom: 4, marginBottom: 6 }}>
+    <Text style={{ fontSize: 9, fontWeight: 'bold', color: COLORS.maroon }}>{TrustData?.name || ''}</Text>
+    <Text style={{ fontSize: 7.5, color: COLORS.navy, fontWeight: 'bold' }}>लेन-देन रिपोर्ट · {trunc(programInfo?.name || programInfo?.hiname || '', 28)} · पृष्ठ {page}/{pages}</Text>
+  </View>
+);
+
 const TransactionsReportPDF = ({
   transactions = [],
   summary,
   programInfo,
   filters,
   generatedDate,
-  TrustData,
+  TrustData = {},
 }) => {
   const now         = new Date();
   const currentDate = now.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
   const currentTime = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+  const trust = { ...TrustData, topTitle: Array.isArray(TrustData?.topTitle) ? TrustData.topTitle : [] };
 
-  const cashTotal   = transactions.filter(t => t.paymentMethod === 'cash').reduce((s, t) => s + (t.amount || 0), 0);
-  const onlineTotal = transactions.filter(t => t.paymentMethod !== 'cash').reduce((s, t) => s + (t.amount || 0), 0);
-  const avg         = summary?.totalTransactions > 0 ? (summary.totalAmount / summary.totalTransactions) : 0;
+  let cashTotal = 0, onlineTotal = 0;
+  for (const t of transactions) (t.paymentMethod === 'cash' ? (cashTotal += t.amount || 0) : (onlineTotal += t.amount || 0));
+  const avg = summary?.totalTransactions > 0 ? (summary.totalAmount / summary.totalTransactions) : 0;
 
   const getFilterText = () => {
     const parts = [];
@@ -430,95 +420,94 @@ const TransactionsReportPDF = ({
     return parts.length ? `फ़िल्टर: ${parts.join('  |  ')}` : 'कोई फ़िल्टर नहीं — सभी लेन-देन';
   };
 
+  const pages = paginate(transactions.length);
+  const footerLeft = `जनरेट: ${generatedDate || `${currentDate} ${currentTime}`}`;
+  const year = now.getFullYear();
+
   return (
-    <Document title="Transactions Report" author={TrustData.name}>
-      <Page size="A4" style={S.page}>
-        <View style={S.outerBorder}>
-          <View style={S.innerBorder}>
+    <Document title="Transactions Report" author={trust.name}>
+      {pages.map(([from, to], pi) => {
+        const first = pi === 0;
+        const last = pi === pages.length - 1;
+        return (
+          <Page key={pi} size="A4" style={S.page} wrap={false}>
+            <View style={S.outerBorder}>
+              <View style={S.innerBorder}>
+                {first ? (
+                  <>
+                    <PageHeader programInfo={programInfo} summary={summary} currentDate={currentDate} currentTime={currentTime} TrustData={trust} />
+                    <View style={S.filterBar}>
+                      <Text style={S.filterText}>{getFilterText()}</Text>
+                    </View>
+                    <View style={S.summaryRow}>
+                      <View style={[S.summaryCard, { backgroundColor: '#eff6ff', borderColor: '#bfdbfe' }]}>
+                        <Text style={S.summaryLabel}>कुल लेन-देन</Text>
+                        <Text style={[S.summaryValue, { color: COLORS.blue }]}>{summary?.totalTransactions ?? 0}</Text>
+                      </View>
+                      <View style={[S.summaryCard, { backgroundColor: '#dcfce7', borderColor: '#86efac' }]}>
+                        <Text style={S.summaryLabel}>कुल राशि</Text>
+                        <Text style={[S.summaryValue, { color: COLORS.green, fontSize: 11 }]}>{fmt(summary?.totalAmount)}</Text>
+                      </View>
+                      <View style={[S.summaryCard, { backgroundColor: '#fef9c3', borderColor: '#fde68a' }]}>
+                        <Text style={S.summaryLabel}>नकद राशि</Text>
+                        <Text style={[S.summaryValue, { color: '#a16207', fontSize: 11 }]}>{fmt(cashTotal)}</Text>
+                      </View>
+                      <View style={[S.summaryCard, { backgroundColor: '#ede9fe', borderColor: '#c4b5fd' }]}>
+                        <Text style={S.summaryLabel}>ऑनलाइन राशि</Text>
+                        <Text style={[S.summaryValue, { color: '#6d28d9', fontSize: 11 }]}>{fmt(onlineTotal)}</Text>
+                      </View>
+                      <View style={[S.summaryCard, { backgroundColor: '#fff7ed', borderColor: '#fed7aa' }]}>
+                        <Text style={S.summaryLabel}>औसत राशि</Text>
+                        <Text style={[S.summaryValue, { color: '#c2410c', fontSize: 11 }]}>{fmt(Math.round(avg))}</Text>
+                      </View>
+                    </View>
+                  </>
+                ) : (
+                  <MiniHeader TrustData={trust} programInfo={programInfo} page={pi + 1} pages={pages.length} />
+                )}
 
-            {/* ── Header (repeated on each page via fixed) ── */}
-            <PageHeader
-              programInfo={programInfo}
-              summary={summary}
-              currentDate={currentDate}
-              currentTime={currentTime}
-              TrustData={TrustData}
-            />
+                {(to > from || last) && (
+                  <View style={S.tableWrapper}>
+                    {to > from && <TableHead />}
+                    {transactions.slice(from, to).map((t, i) => (
+                      <DataRow key={t.id || from + i} t={t} idx={from + i} />
+                    ))}
+                    {last && (
+                      <View style={S.totalRow}>
+                        <View style={{ width: COL.no + COL.trx + COL.date + COL.payer + COL.benef }}>
+                          <Text style={[S.totalCell, { textAlign: 'right', paddingRight: 6 }]}>कुल योग →</Text>
+                        </View>
+                        <View style={{ width: COL.amount }}>
+                          <Text style={[S.totalCell, { textAlign: 'right', color: '#86efac' }]}>{fmt(summary?.totalAmount)}</Text>
+                        </View>
+                        <View style={{ width: COL.method + COL.ref }}>
+                          <Text style={[S.totalCell, { textAlign: 'center', fontSize: 7, color: 'rgba(255,255,255,0.6)' }]}>
+                            {summary?.totalTransactions} entries
+                          </Text>
+                        </View>
+                      </View>
+                    )}
+                  </View>
+                )}
 
-            {/* ── Filters ── */}
-            <View style={S.filterBar}>
-              <Text style={S.filterText}>{getFilterText()}</Text>
+                {last && (
+                  <View style={S.notice}>
+                    <Text style={S.noticeText}>
+                      यह दान स्वेच्छिक रूप से दिया गया है और किसी भी कारणवश इसकी वापसी नहीं की जाएगी।
+                    </Text>
+                  </View>
+                )}
+              </View>
             </View>
 
-            {/* ── Summary Cards ── */}
-            <View style={S.summaryRow}>
-              <View style={[S.summaryCard, { backgroundColor: '#eff6ff', borderColor: '#bfdbfe' }]}>
-                <Text style={S.summaryLabel}>कुल लेन-देन</Text>
-                <Text style={[S.summaryValue, { color: COLORS.blue }]}>{summary?.totalTransactions ?? 0}</Text>
-              </View>
-              <View style={[S.summaryCard, { backgroundColor: '#dcfce7', borderColor: '#86efac' }]}>
-                <Text style={S.summaryLabel}>कुल राशि</Text>
-                <Text style={[S.summaryValue, { color: COLORS.green, fontSize: 11 }]}>{fmt(summary?.totalAmount)}</Text>
-              </View>
-              <View style={[S.summaryCard, { backgroundColor: '#fef9c3', borderColor: '#fde68a' }]}>
-                <Text style={S.summaryLabel}>नकद राशि</Text>
-                <Text style={[S.summaryValue, { color: '#a16207', fontSize: 11 }]}>{fmt(cashTotal)}</Text>
-              </View>
-              <View style={[S.summaryCard, { backgroundColor: '#ede9fe', borderColor: '#c4b5fd' }]}>
-                <Text style={S.summaryLabel}>ऑनलाइन राशि</Text>
-                <Text style={[S.summaryValue, { color: '#6d28d9', fontSize: 11 }]}>{fmt(onlineTotal)}</Text>
-              </View>
-              <View style={[S.summaryCard, { backgroundColor: '#fff7ed', borderColor: '#fed7aa' }]}>
-                <Text style={S.summaryLabel}>औसत राशि</Text>
-                <Text style={[S.summaryValue, { color: '#c2410c', fontSize: 11 }]}>{fmt(avg)}</Text>
-              </View>
+            <View style={S.footer}>
+              <Text style={S.footerText}>{footerLeft}</Text>
+              <Text style={S.footerText}>{trust.name} © {year}</Text>
+              <Text style={S.pageNum}>पृष्ठ {pi + 1} / {pages.length}</Text>
             </View>
-
-            {/* ── Table ── */}
-            <View style={S.tableWrapper}>
-              {/* Header row — fixed so it repeats on every page */}
-              <TableHead />
-
-              {/* Data rows — wrap={false} on each row prevents cutting */}
-              {transactions.map((t, i) => (
-                <DataRow key={t.id || i} t={t} idx={i} />
-              ))}
-
-              {/* ── Total row ── */}
-              <View style={S.totalRow} wrap={false}>
-                <View style={{ width: COL.no + COL.trx + COL.date + COL.payer + COL.benef }}>
-                  <Text style={[S.totalCell, { textAlign: 'right', paddingRight: 6 }]}>कुल योग →</Text>
-                </View>
-                <View style={{ width: COL.amount }}>
-                  <Text style={[S.totalCell, { textAlign: 'right', color: '#86efac' }]}>
-                    {fmt(summary?.totalAmount)}
-                  </Text>
-                </View>
-                <View style={{ width: COL.method + COL.ref }}>
-                  <Text style={[S.totalCell, { textAlign: 'center', fontSize: 7, color: 'rgba(255,255,255,0.6)' }]}>
-                    {summary?.totalTransactions} entries
-                  </Text>
-                </View>
-              </View>
-            </View>
-
-            {/* ── Notice ── */}
-            <View style={S.notice}>
-              <Text style={S.noticeText}>
-                यह दान स्वेच्छिक रूप से दिया गया है और किसी भी कारणवश इसकी वापसी नहीं की जाएगी।
-              </Text>
-            </View>
-
-          </View>
-        </View>
-
-        {/* ── Fixed footer — appears on every page ── */}
-        <View style={S.footer} fixed>
-          <Text style={S.footerText}>जनरेट: {generatedDate || `${currentDate} ${currentTime}`}</Text>
-          <Text style={S.footerText}>{TrustData.name} © {new Date().getFullYear()}</Text>
-          <Text style={S.pageNum} render={({ pageNumber, totalPages }) => `पृष्ठ ${pageNumber} / ${totalPages}`} />
-        </View>
-      </Page>
+          </Page>
+        );
+      })}
     </Document>
   );
 };

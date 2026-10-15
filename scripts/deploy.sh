@@ -29,12 +29,15 @@ cp -r .next/static "$STANDALONE/.next/"
 rm -rf "$STANDALONE/workers" && cp -r workers "$STANDALONE/workers"   # receipts PDF worker (path = cwd/workers)
 rm -rf .release.new && cp -r "$STANDALONE" .release.new
 
+echo "▶ backup before migrations"
+bash scripts/backup.sh predeploy || { echo "✖ backup failed — deploy stopped, live site not touched (see message above)"; exit 1; }
+
 echo "▶ database migrations"
 node --env-file=.env scripts/db-migrate.js
 
 echo "▶ switch release + restart $SERVICE"
 rm -rf .release.old; [ -d .release ] && mv .release .release.old; mv .release.new .release
-if command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files | grep -q "^$SERVICE.service"; then
+if command -v systemctl >/dev/null 2>&1 && { [ -f "/etc/systemd/system/$SERVICE.service" ] || systemctl cat "$SERVICE" >/dev/null 2>&1; }; then
   sudo systemctl restart "$SERVICE"
   sleep 4
   if curl -fsS "http://127.0.0.1:${PORT:-3000}/api/health" >/dev/null; then

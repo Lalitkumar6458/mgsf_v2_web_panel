@@ -6,7 +6,7 @@
 // - Finished files live in <UPLOAD_DIR>/tmp/receipts for 24 hours.
 import { Worker } from "node:worker_threads";
 import { randomUUID } from "node:crypto";
-import { mkdir, writeFile, readdir, stat, unlink, access } from "node:fs/promises";
+import { mkdir, writeFile, readdir, stat, unlink } from "node:fs/promises";
 import path from "node:path";
 import { receiptMembers, receiptEstimate } from "./reports.js";
 import { badRequest } from "../lib/errors.js";
@@ -42,41 +42,59 @@ export function splitParts(members, maxPages = MAX_PAGES) {
 }
 
 async function getWorker() {
-  if (state.worker) return state.worker;
-  await access(workerFile()); // throws if the bundle is missing → fallback below
+  // the bundle is rebuilt by `npm run dev` / `npm run build`; a worker started from an older
+  // bundle would keep drawing with old code (e.g. a receipt instead of a report) — restart it
+  const { mtimeMs } = await stat(workerFile()); // throws ENOENT if the bundle is missing → fallback below
+  if (state.worker && state.workerMtime === mtimeMs) return state.worker;
+  if (state.worker) { state.worker.terminate().catch(() => {}); state.worker = null; }
   const w = new Worker(workerFile());
-  w.on("message", ({ id, ok, pdf, error }) => {
+  w.on("message", ({ id, ok, pdf, error, kind }) => {
     const p = state.waiting.get(id);
     if (!p) return;
     state.waiting.delete(id);
-    ok ? p.resolve(Buffer.from(pdf)) : p.reject(new Error(error));
+    ok ? p.resolve({ buf: Buffer.from(pdf), kind }) : p.reject(new Error(error));
   });
   w.on("error", (e) => {
     for (const p of state.waiting.values()) p.reject(e);
     state.waiting.clear();
     state.worker = null;
   });
-  w.on("exit", () => { state.worker = null; });
+  w.on("exit", () => { if (state.worker === w) state.worker = null; });
   state.worker = w;
+  state.workerMtime = mtimeMs;
   return w;
 }
 
-async function renderPdf(props) {
+/** Same PDF drawn in this thread — when the worker bundle is missing or out of date. */
+async function renderHere(props, kind) {
+  if (kind === "transactions") return (await import("@/lib/pdf/transactionsReport")).buildTransactionsReport(props);
+  const React = (await import("react")).default;
+  const { renderToBuffer } = await import("@react-pdf/renderer");
+  const { default: VivahMemoPDF } = await import("@/components/screen/agents/agentDetails/component/pdfcom/VivahMemoPDF");
+  return renderToBuffer(React.createElement(VivahMemoPDF, props));
+}
+
+/** Draw a PDF in the worker thread. kind: "receipts" (VivahMemoPDF) | "transactions" (pdfkit report) */
+export async function renderPdf(props, kind = "receipts") {
+  let res;
   try {
     const w = await getWorker();
     const id = ++state.seq;
-    return await new Promise((resolve, reject) => {
+    res = await new Promise((resolve, reject) => {
       state.waiting.set(id, { resolve, reject });
-      w.postMessage({ id, props });
+      w.postMessage({ id, kind, props });
     });
   } catch (e) {
     if (e?.code !== "ENOENT") throw e;
-    // worker bundle not built (run `npm run build:workers`) — draw in this thread instead
-    const React = (await import("react")).default;
-    const { renderToBuffer } = await import("@react-pdf/renderer");
-    const { default: VivahMemoPDF } = await import("@/components/screen/agents/agentDetails/component/pdfcom/VivahMemoPDF");
-    return renderToBuffer(React.createElement(VivahMemoPDF, props));
+    console.warn("[pdf] worker bundle missing — run `npm run build:workers`; drawing in the main thread");
+    return renderHere(props, kind);
   }
+  // an old bundle does not know `kind` (it always drew receipts) — never hand that PDF out
+  if (res.kind !== kind) {
+    console.warn("[pdf] worker bundle is out of date — run `npm run build:workers`; drawing in the main thread");
+    return renderHere(props, kind);
+  }
+  return res.buf;
 }
 
 async function cleanup() {

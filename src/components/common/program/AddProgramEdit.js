@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Button, Drawer, Form, Input, InputNumber, Select, Space, Card, Typography, App, Radio, Alert, Tag, message } from 'antd';
 import { FiPlusCircle, FiTrash2, FiUser, FiMapPin, FiDollarSign, FiCalendar, FiTag, FiEdit2, FiSave, FiHash } from 'react-icons/fi';
 import { REG_DEFAULTS, previewRegistrationNumbers } from '@/lib/helper';
+import { COUNT_MODES, displayCount, normalizeCountDisplay } from '@/lib/memberCountDisplay';
 import { useAuth } from '@/lib/AuthProvider';
 import { api } from "@/lib/client/api";
 import { setgetMemberDataChange, setPrograms } from '@/redux/slices/commonSlice';
@@ -38,6 +39,14 @@ const AddProgramEdit = ({ program, mode = 'add', onSuccess, triggerButton = null
   const regMode    = Form.useWatch('regMode', form);
   const regDigits  = Form.useWatch('regDigits', form);
   const regStartNo = Form.useWatch('regStartNo', form);
+  const countMode    = Form.useWatch('countMode', form) || 'actual';
+  const countPercent = Form.useWatch('countPercent', form);
+  const countFixed   = Form.useWatch('countFixed', form);
+  // members on books right now (edit) — for the live "dikhega" preview
+  const realCount = mode === 'edit' ? (program?.totalMembers ?? 0) : 0;
+  const shownCount = displayCount(realCount, normalizeCountDisplay(
+    { mode: countMode, percent: countPercent, fixed: countFixed },
+    mode === 'edit' ? program?.extra?.countDisplay : {}, realCount));
 
   // Numbers already issued in this program — a series must not restart below it
   const issuedCounter = parseInt(program?.regCounter, 10) || 0;
@@ -73,8 +82,9 @@ const AddProgramEdit = ({ program, mode = 'add', onSuccess, triggerButton = null
         guname: program.guname || "",
         noteLine: program.noteLine || '',
         about: program.about,
-        memberCount:program?.memberCount ||  0,
-        inactivemembercount:program?.inactivemembercount || 0,
+        countMode: program.extra?.countDisplay?.mode || 'actual',
+        countPercent: program.extra?.countDisplay?.percent ?? 70,
+        countFixed: program.extra?.countDisplay?.fixed ?? program?.totalMembers ?? 0,
         category: selectedCategory,
         dueDays: program.dueDays ?? 45,
         defaultPayAmount: program.defaultPayAmount ?? 200,
@@ -90,7 +100,7 @@ const AddProgramEdit = ({ program, mode = 'add', onSuccess, triggerButton = null
       // Reset form for add mode
       setIsSelected(false);
       form.resetFields();
-      form.setFieldsValue({ ...REG_DEFAULTS });
+      form.setFieldsValue({ ...REG_DEFAULTS, countMode: 'actual', countPercent: 70, countFixed: 0, dueDays: 45, defaultPayAmount: 200 });
     }
   }, [mode, program, isDrawerOpen, form]);
 
@@ -126,6 +136,13 @@ const AddProgramEdit = ({ program, mode = 'add', onSuccess, triggerButton = null
         categoryFlags[values.category] = true;
       }
 
+      // how the member count is shown (server keeps the starting point of a fixed count)
+      const countDisplay = {
+        mode: values.countMode || 'actual',
+        percent: values.countPercent,
+        fixed: values.countFixed,
+      };
+
       // Registration number settings for this yojna
       const regSettings = {
         regPrefix: (values.regPrefix ?? REG_DEFAULTS.regPrefix).trim(),
@@ -142,7 +159,7 @@ const AddProgramEdit = ({ program, mode = 'add', onSuccess, triggerButton = null
           noteLine: values.noteLine || '',
           about: values.about,
           category: values.category || '',
-          extra: categoryFlags,
+          extra: { ...categoryFlags, countDisplay },
           ...regSettings,
           dueDays: values.dueDays ?? 45,
           defaultPayAmount: values.defaultPayAmount ?? 200,
@@ -162,7 +179,7 @@ const AddProgramEdit = ({ program, mode = 'add', onSuccess, triggerButton = null
           noteLine: values.noteLine || '',
           about: values.about,
           category: values.category || '',
-          extra: { ...(program.extra || {}), ...categoryFlags },
+          extra: { ...(program.extra || {}), ...categoryFlags, countDisplay },
           ...regSettings,
           dueDays: values.dueDays ?? 45,
           defaultPayAmount: values.defaultPayAmount ?? 200,
@@ -176,7 +193,6 @@ const AddProgramEdit = ({ program, mode = 'add', onSuccess, triggerButton = null
         if(item.id ===program.id){
           return {
             ...item,
-            memberCount:values?.memberCount,
                  name: values.name,
           hiname: values.hiname,
           guname:values.guname,
@@ -187,8 +203,7 @@ const AddProgramEdit = ({ program, mode = 'add', onSuccess, triggerButton = null
           dueDays: values.dueDays ?? 45,
           defaultPayAmount: values.defaultPayAmount ?? 200,
           isSelected: isSelected,
-            memberCount:values?.memberCount,
-              inactivemembercount:values?.inactivemembercount,
+            extra: { ...(item.extra || {}), countDisplay },
           ageGroups: ageGroupsWithId,
           locationGroups: locationGroupsWithId,
           updatedAt: new Date(),
@@ -454,31 +469,9 @@ const AddProgramEdit = ({ program, mode = 'add', onSuccess, triggerButton = null
                     className="h-10"
                   />
                 </Form.Item>
-                        <Form.Item
-                  label="Member Count"
-                  name="memberCount"
-                  rules={[{ required: false }]}
-                >
-                  <Input 
-                    placeholder="Enter Member Count" 
-                    className="h-10"
-                  />
-                </Form.Item>
-                        
-                        <Form.Item
-                  label="InActive Member Count"
-                  name="inactivemembercount"
-                  rules={[{ required: false }]}
-                >
-                  <Input 
-                    placeholder="Enter InActive Member Count" 
-                    className="h-10"
-                  />
-                </Form.Item>
                 <Form.Item
                   label="Certificate Note (Hindi)"
                   name="noteLine"
-                  rules={[{ required: true, message: 'Please enter note' }]}
                 >
                   <Input 
                     placeholder="Enter hindi note for certificate" 
@@ -488,7 +481,6 @@ const AddProgramEdit = ({ program, mode = 'add', onSuccess, triggerButton = null
                 <Form.Item
                   label="About Program"
                   name="about"
-                  rules={[{ required: true, message: 'Please enter program description' }]}
                 >
                   <TextArea
                     placeholder="Enter program description"
@@ -555,6 +547,44 @@ const AddProgramEdit = ({ program, mode = 'add', onSuccess, triggerButton = null
                   extra="Jab age group se kist na mile">
                   <InputNumber min={0} max={100000} addonBefore="₹" className="!w-full" />
                 </Form.Item>
+              </div>
+            </Card>
+
+            {/* Member count display */}
+            <Card className="border border-gray-200">
+              <Title level={5} className="!mb-1 flex items-center gap-2">
+                <FiUser className="text-indigo-600" />
+                Member count kaise dikhe
+              </Title>
+              <Text type="secondary" className="block !mb-4 text-xs">
+                Dashboard aur yojna par members ki ginti kis tarah dikhani hai. Naye member judte hi ginti badhti rehti hai.
+              </Text>
+              <Form.Item name="countMode" initialValue="actual" className="!mb-3">
+                <Radio.Group className="w-full">
+                  <Space direction="vertical" className="w-full">
+                    <Radio value="actual"><strong>Asli ginti</strong> — jitne member hain utne hi</Radio>
+                    <Radio value="percent"><strong>Percent</strong> — asli ginti ka kuch % (jaise 1000 ka 70% = 700)</Radio>
+                    <Radio value="fixed"><strong>Fixed ginti se shuru</strong> — jaise 600 dikhe, phir har naya member +1</Radio>
+                  </Space>
+                </Radio.Group>
+              </Form.Item>
+              {countMode === 'percent' && (
+                <Form.Item label="Kitne % dikhane hain" name="countPercent" initialValue={70}
+                  rules={[{ required: true, message: 'Percent likhein' }]}>
+                  <InputNumber min={1} max={1000} addonAfter="%" className="w-full" />
+                </Form.Item>
+              )}
+              {countMode === 'fixed' && (
+                <Form.Item label="Abhi kitni ginti dikhani hai" name="countFixed" initialValue={0}
+                  tooltip="Save karte waqt jitne asli member hain, unke baad jo naye judenge woh isme judte jayenge."
+                  rules={[{ required: true, message: 'Ginti likhein' }]}>
+                  <InputNumber min={0} className="w-full" />
+                </Form.Item>
+              )}
+              <div className="rounded-md bg-gray-50 border border-gray-200 px-3 py-2 text-sm flex flex-wrap gap-x-6 gap-y-1">
+                <span>Asli abhi: <b>{realCount}</b></span>
+                <span>Dikhega: <b className="text-indigo-700">{shownCount}</b></span>
+                {countMode === 'fixed' && <span className="text-gray-500 text-xs">50 naye member judne par: {displayCount(realCount + 50, normalizeCountDisplay({ mode: 'fixed', fixed: countFixed }, mode === 'edit' ? program?.extra?.countDisplay : {}, realCount))}</span>}
               </div>
             </Card>
 

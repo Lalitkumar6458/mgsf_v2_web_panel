@@ -1,6 +1,7 @@
 "use client";
 // Master Data: dropdown lists (state, district, relation, caste, gotra) + staff users & roles.
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { useQueryTab } from "@/lib/client/useQueryTab";
 import { App, Tabs } from "antd";
 import { FiMap, FiMapPin, FiLink, FiUsers, FiShield, FiTag, FiHash } from "react-icons/fi";
 import { api } from "@/lib/client/api";
@@ -12,6 +13,10 @@ import UsersRoles from "@/components/screen/master/UsersRoles";
 const ICONS = { state: FiMap, district: FiMapPin, relation: FiLink, caste: FiTag, gotra: FiHash };
 
 export default function MasterPage() {
+  return <Suspense fallback={null}><Master /></Suspense>;
+}
+
+function Master() {
   const { message } = App.useApp();
   const can = useCan();
   const [lists, setLists] = useState({});
@@ -34,6 +39,7 @@ export default function MasterPage() {
       { key: "roles", label: <span className="inline-flex items-center gap-1.5"><FiShield /> Roles</span>, children: <UsersRoles show="roles" /> },
     ] : []),
   ], [can, lists, reload]);
+  const [tab, setTab] = useQueryTab(items[0]?.key, items.map((i) => i.key));
 
   return (
     <div className="p-4 sm:p-6 space-y-4">
@@ -41,7 +47,7 @@ export default function MasterPage() {
         <h1 className="text-2xl font-bold text-gray-900">Master Data</h1>
         <p className="text-gray-500 text-sm">Forms ki dropdown lists, staff users aur unke roles — sab yahan se.</p>
       </div>
-      <Tabs items={items} destroyOnHidden />
+      <Tabs items={items} activeKey={tab} onChange={setTab} destroyOnHidden />
     </div>
   );
 }

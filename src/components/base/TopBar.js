@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { Popover, Modal, Tooltip, Select } from 'antd';
 import { usePathname, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { 
   FiMenu, 
   FiX, 
@@ -10,7 +11,10 @@ import {
   FiChevronRight,
   FiChevronDown,
   FiGrid,
-  FiSearch
+  FiSearch,
+  FiBookOpen,
+  FiSettings,
+  FiDroplet,
 } from 'react-icons/fi';
 import RequestSection from '../common/requestSection';
 import AddProgram from '../common/program';
@@ -34,6 +38,8 @@ const PAGE_LABELS = {
   'closedMembers': 'Closed Members',
   'transactions': 'Payments',
   'setting': 'Settings',
+  'reports': 'Reports',
+  'master': 'Master Data',
 };
 
 const TopBar = ({ sidebarCollapsed, toggleSidebar, showNotifications, toggleNotifications, showUserMenu, toggleUserMenu }) => {
@@ -59,6 +65,8 @@ const TopBar = ({ sidebarCollapsed, toggleSidebar, showNotifications, toggleNoti
   };
 
   const initials = user?.username ? user.username.charAt(0).toUpperCase() : 'U';
+  const staff = user?.access && !user.access.isSuper;
+  const roleName = staff ? user.access.roleName : 'Super Admin';
 
   // the action buttons (and their data) are mounted once: in the bar on wide screens,
   // in the strip below it on phones
@@ -77,9 +85,10 @@ const TopBar = ({ sidebarCollapsed, toggleSidebar, showNotifications, toggleNoti
         @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap');
         .topbar-root {
           font-family: 'Outfit', sans-serif;
-          background: #fff;
-          border-bottom: 1px solid #f1f5f9;
-          box-shadow: 0 1px 0 rgba(0,0,0,0.05), 0 2px 8px rgba(0,0,0,0.03);
+          background: var(--tb-bg);
+          border-bottom: 1px solid var(--tb-border);
+          box-shadow: 0 1px 2px rgba(15,23,42,0.04);
+          position: relative;
         }
         .toggle-btn {
           width: 38px; height: 38px;
@@ -91,12 +100,12 @@ const TopBar = ({ sidebarCollapsed, toggleSidebar, showNotifications, toggleNoti
           flex-shrink: 0;
         }
         .toggle-btn:hover {
-          background: #f1f5f9;
-          color: #3b82f6;
-          border-color: #e2e8f0;
+          background: var(--brand-softer);
+          color: var(--brand);
+          border-color: var(--brand-soft);
         }
         .breadcrumb-page {
-          font-size: 15px;
+          font-size: 16px;
           font-weight: 700;
           color: #0f172a;
           letter-spacing: -0.01em;
@@ -110,8 +119,8 @@ const TopBar = ({ sidebarCollapsed, toggleSidebar, showNotifications, toggleNoti
         /* Program select override */
         .program-select .ant-select-selector {
           border-radius: 10px !important;
-          border: 1px solid #e2e8f0 !important;
-          background: #f8fafc !important;
+          border: 1px solid var(--tb-border) !important;
+          background: var(--brand-softer) !important;
           font-family: 'Outfit', sans-serif !important;
           font-size: 13px !important;
           height: 38px !important;
@@ -120,12 +129,12 @@ const TopBar = ({ sidebarCollapsed, toggleSidebar, showNotifications, toggleNoti
           transition: all 0.18s !important;
         }
         .program-select .ant-select-selector:hover {
-          border-color: #3b82f6 !important;
+          border-color: var(--brand) !important;
           background: #fff !important;
         }
         .program-select.ant-select-focused .ant-select-selector {
-          border-color: #3b82f6 !important;
-          box-shadow: 0 0 0 3px rgba(59,130,246,0.12) !important;
+          border-color: var(--brand) !important;
+          box-shadow: 0 0 0 3px var(--brand-ring) !important;
           background: #fff !important;
         }
 
@@ -134,17 +143,17 @@ const TopBar = ({ sidebarCollapsed, toggleSidebar, showNotifications, toggleNoti
           display: flex; align-items: center; gap: 8px;
           padding: 5px 10px 5px 5px;
           border-radius: 40px;
-          border: 1px solid #e2e8f0;
+          border: 1px solid var(--tb-border);
           transition: all 0.18s;
           cursor: pointer;
         }
         .user-avatar-btn:hover {
-          background: #f8fafc;
-          border-color: #cbd5e1;
+          background: var(--brand-softer);
+          border-color: var(--brand-light);
         }
         .user-avatar {
           width: 30px; height: 30px;
-          background: linear-gradient(135deg, #3b82f6, #2563eb);
+          background: linear-gradient(135deg, var(--brand), var(--brand-hover));
           border-radius: 50%;
           display: flex; align-items: center; justify-content: center;
           color: #fff;
@@ -163,7 +172,7 @@ const TopBar = ({ sidebarCollapsed, toggleSidebar, showNotifications, toggleNoti
         .user-dropdown {
           position: absolute;
           right: 0; top: calc(100% + 8px);
-          width: 220px;
+          width: 250px;
           background: #fff;
           border-radius: 14px;
           border: 1px solid #e2e8f0;
@@ -174,8 +183,20 @@ const TopBar = ({ sidebarCollapsed, toggleSidebar, showNotifications, toggleNoti
         }
         .user-dropdown-header {
           padding: 12px 16px;
-          background: linear-gradient(135deg, #f8fafc, #f1f5f9);
-          border-bottom: 1px solid #f1f5f9;
+          background: var(--brand-softer);
+          border-bottom: 1px solid var(--tb-border);
+          display: flex; gap: 10px; align-items: center;
+        }
+        .menu-link {
+          display: flex; align-items: center; gap: 10px;
+          width: 100%; padding: 9px 16px;
+          font-size: 13px; font-weight: 500; color: #334155;
+          transition: background 0.15s, color 0.15s;
+        }
+        .menu-link:hover { background: var(--brand-softer); color: var(--brand); }
+        .menu-role {
+          display: inline-block; margin-top: 4px; font-size: 10.5px; font-weight: 600;
+          padding: 1px 8px; border-radius: 99px; background: var(--brand-soft); color: var(--brand-hover);
         }
         .logout-btn {
           display: flex; align-items: center; gap: 10px;
@@ -191,7 +212,7 @@ const TopBar = ({ sidebarCollapsed, toggleSidebar, showNotifications, toggleNoti
         /* Separator */
         .topbar-sep {
           width: 1px; height: 24px;
-          background: #e2e8f0;
+          background: var(--tb-border);
           flex-shrink: 0;
         }
 
@@ -200,8 +221,9 @@ const TopBar = ({ sidebarCollapsed, toggleSidebar, showNotifications, toggleNoti
           to { opacity: 1; transform: translateY(0); }
         }
 
-        /* Small laptop / tablet: icon-only action buttons, shorter program select */
-        @media (max-width: 1439px) {
+        .topbar-actions .ant-btn { text-transform: none; font-weight: 500; }
+        /* up to 1599px: icon-only action buttons (each has a title tooltip), shorter program select */
+        @media (max-width: 1599px) {
           .topbar-actions .ant-btn > span:not(.ant-btn-icon):not(.anticon) { display: none; }
           .topbar-actions .ant-btn { padding-inline: 10px; }
           .topbar-actions .ant-btn .ant-btn-icon { margin-inline-end: 0 !important; }
@@ -227,18 +249,18 @@ const TopBar = ({ sidebarCollapsed, toggleSidebar, showNotifications, toggleNoti
 
       <header className="topbar-root h-16 px-4 sm:px-6 flex items-center justify-between gap-3">
         {/* Left */}
-        <div className="flex items-center gap-3 min-w-0">
+        <div className="flex items-center gap-3 min-w-0 flex-shrink-0">
           <button onClick={toggleSidebar} className="toggle-btn" aria-label="Toggle sidebar">
             {sidebarCollapsed ? <FiMenu size={20} /> : <FiX size={20} />}
           </button>
 
           {/* Breadcrumb */}
-          <nav className="topbar-breadcrumb hidden sm:flex items-center gap-1.5">
-            <FiGrid size={13} className="text-slate-400" />
-            <span className="breadcrumb-home">Home</span>
-            <FiChevronRight size={13} className="text-slate-300" />
+          <div className="topbar-breadcrumb hidden sm:flex flex-col justify-center leading-tight">
+            <span className="flex items-center gap-1 breadcrumb-home" style={{ fontSize: 11.5 }}>
+              <FiGrid size={11} /> Home <FiChevronRight size={11} /> {pageLabel}
+            </span>
             <span className="breadcrumb-page">{pageLabel}</span>
-          </nav>
+          </div>
 
           {/* Page title when the breadcrumb is hidden */}
           <span className="topbar-title sm:hidden breadcrumb-page truncate">{pageLabel}</span>
@@ -254,6 +276,7 @@ const TopBar = ({ sidebarCollapsed, toggleSidebar, showNotifications, toggleNoti
             size="middle"
             onChange={handleProgramSelect}
             value={selectedProgram ? selectedProgram.id : undefined}
+            prefix={<FiBookOpen size={14} style={{ color: 'var(--brand)' }} />}
             suffixIcon={<FiChevronDown size={13} className="text-slate-400" />}
           >
             {programList.map(p => (
@@ -287,9 +310,18 @@ const TopBar = ({ sidebarCollapsed, toggleSidebar, showNotifications, toggleNoti
             {showUserMenu && (
               <div className="user-dropdown user-menu-content">
                 <div className="user-dropdown-header">
-                  <p className="text-sm font-bold text-slate-800 truncate">{user?.username || 'User'}</p>
-                  <p className="text-xs text-slate-500 truncate mt-0.5">{user?.email || ''}</p>
+                  <div className="user-avatar" style={{ width: 38, height: 38, fontSize: 15 }}>{initials}</div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-slate-800 truncate">{staff ? user.displayName : (user?.username || 'User')}</p>
+                    <p className="text-xs text-slate-500 truncate">{user?.email || ''}</p>
+                    <span className="menu-role">{roleName}</span>
+                  </div>
                 </div>
+                <div className="py-1">
+                  <Link href="/setting" className="menu-link" onClick={toggleUserMenu}><FiSettings size={15} /> Settings</Link>
+                  {can('settings') && <Link href="/setting?tab=theme" className="menu-link" onClick={toggleUserMenu}><FiDroplet size={15} /> Theme / colours</Link>}
+                </div>
+                <div style={{ borderTop: '1px solid var(--tb-border)' }} />
                 <button onClick={() => setIsLogoutModalOpen(true)} className="logout-btn">
                   <FiLogOut size={15} />
                   <span>Logout</span>

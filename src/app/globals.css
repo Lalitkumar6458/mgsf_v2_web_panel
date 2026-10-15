@@ -1,10 +1,35 @@
 @import "tailwindcss";
 
+/* Theme (Settings → Theme): Tailwind's blue and indigo follow the trust's brand colour.
+   --brand-* are set on <html> by lib/theme (defaults in app/layout.js). */
+@theme inline {
+  --color-blue-50: var(--brand-50);
+  --color-blue-100: var(--brand-100);
+  --color-blue-200: var(--brand-200);
+  --color-blue-300: var(--brand-300);
+  --color-blue-400: var(--brand-400);
+  --color-blue-500: var(--brand-500);
+  --color-blue-600: var(--brand-600);
+  --color-blue-700: var(--brand-700);
+  --color-blue-800: var(--brand-800);
+  --color-blue-900: var(--brand-900);
+  --color-indigo-50: var(--brand-50);
+  --color-indigo-100: var(--brand-100);
+  --color-indigo-200: var(--brand-200);
+  --color-indigo-300: var(--brand-300);
+  --color-indigo-400: var(--brand-400);
+  --color-indigo-500: var(--brand-500);
+  --color-indigo-600: var(--brand-600);
+  --color-indigo-700: var(--brand-700);
+  --color-indigo-800: var(--brand-800);
+  --color-indigo-900: var(--brand-900);
+}
+
 :root {
   /* Primary Colors - Trustworthy blues with softer tones */
-  --primary-blue: #3b82f6;
-  --primary-dark: #1e40af;
-  --primary-light: #bfdbfe;
+  --primary-blue: var(--brand, #3b82f6);
+  --primary-dark: var(--brand-hover, #1e40af);
+  --primary-light: var(--brand-200, #bfdbfe);
 
   /* Secondary Colors - Compassionate and financial tones */
   --accent-gold: #f59e0b;

@@ -8,6 +8,7 @@
 //   inactive = accepted, not closed, not blocked, inactive
 //   active   = accepted, not closed, active, not blocked
 // "On books" = active + inactive + blocked + closed.  Soft-deleted members are counted separately.
+import { displayCount } from "../lib/memberCountDisplay.js";
 import { sql } from "drizzle-orm";
 import { db } from "../db/index.js";
 
@@ -67,6 +68,13 @@ export async function programAnalytics(programId, { agentId, months = 12 } = {})
     activeOtherGender: Math.max(0, c.active - c.active_male - c.active_female),
     joinedThisMonth: c.joined_this_month, closedThisMonth: c.closed_this_month,
   };
+
+  // the count the trust chose to show (Yojna → "Member count kaise dikhe"); agents see their own real numbers
+  if (!agentId) {
+    const { rows: [pr] } = await db.execute(sql`SELECT extra->'countDisplay' AS cd FROM programs WHERE id = ${programId}`);
+    members.countDisplay = pr?.cd || { mode: "actual" };
+    members.display = displayCount(members.onBooks, pr?.cd);
+  }
 
   // ── 2. money: one pass over transactions and one over dues, totals per payer,
   //    then summed per agent (fast even with lakhs of rows; uses the covering indexes) ──

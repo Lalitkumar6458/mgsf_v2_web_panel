@@ -394,3 +394,26 @@ export const notifications = pgTable("notifications", {
   index("notifications_account_idx").on(t.accountId, t.createdAt),
 ]);
 
+
+// ─── Certificate builder (migration 0007) ──────────────────────────────────
+// A design for the सदस्यता प्रमाण पत्र: the trust's frame artwork + where each text / field sits on it.
+// Coordinates are artwork pixels — see src/lib/certificateTemplate.js.
+// At most one default per trust and one template per yojna (partial unique indexes in the SQL).
+export const certificateTemplates = pgTable("certificate_templates", {
+  id: id(),
+  adminId: text("admin_id").notNull().references(() => admins.id, { onDelete: "cascade" }),
+  name: str("name"),
+  isDefault: boolean("is_default").notNull().default(false),
+  programId: text("program_id").references(() => programs.id, { onDelete: "set null" }),
+  page: json("page", {}),
+  art: json("art", {}),
+  bg: json("bg", {}),            // page background { color } (migration 0008)
+  frameImg: str("frame_img"),
+  elements: json("elements", []),
+  createdBy: str("created_by"),
+  updatedBy: str("updated_by"),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+}, (t) => [
+  index("certificate_templates_admin_idx").on(t.adminId),
+]);

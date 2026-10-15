@@ -3,6 +3,9 @@ import { getAuth } from "@/lib/auth.js";
 import { assertApiAccess } from "@/lib/apiAccess.js";
 import { getTrustProfile } from "@/services/trust.js";
 import CertificateServerSide from "@/components/pdfcom/Certificates/CertificateComServerSide";
+import TemplateCertificatePdf from "@/components/pdfcom/Certificates/TemplateCertificatePdf";
+import { getActiveTemplate } from "@/services/certificateTemplates.js";
+import { resolveCertificateImages } from "@/lib/certificateImages.js";
 import { renderToBuffer } from "@react-pdf/renderer";
 
 export const runtime = "nodejs";
@@ -28,14 +31,26 @@ export async function POST(req) {
   try {
     const { memberData, selectedProgram } = await req.json();
 
-    // ✅ CORRECT BUFFER
-    const buffer = await renderToBuffer(
-      <CertificateServerSide
-        data={memberData}
-        selectedProgram={selectedProgram}
-        TrustData={await getTrustProfile(auth.adminId)}
-      />
-    );
+    // the trust's own design (Certificate Builder) if it has one for this yojna, else the built-in one
+    const template = await getActiveTemplate(auth.adminId, selectedProgram?.id || memberData?.programId || null)
+      .catch((e) => { console.error("[certificate] template lookup failed", e); return null; });
+
+    let buffer;
+    if (template && (template.frameImg || template.elements?.length)) {
+      const ready = await resolveCertificateImages(template, [memberData]);
+      buffer = await renderToBuffer(
+        <TemplateCertificatePdf template={ready.template} members={ready.members} program={selectedProgram} trust={await getTrustProfile(auth.adminId)}
+          title={`${memberData?.displayName || ""} — सदस्यता प्रमाण पत्र`} />
+      );
+    } else {
+      buffer = await renderToBuffer(
+        <CertificateServerSide
+          data={memberData}
+          selectedProgram={selectedProgram}
+          TrustData={await getTrustProfile(auth.adminId)}
+        />
+      );
+    }
 
     // 🔍 Debug (optional)
     console.log("PDF buffer size:", buffer.length);

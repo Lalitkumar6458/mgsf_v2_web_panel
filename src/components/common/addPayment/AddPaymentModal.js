@@ -1,4 +1,5 @@
 'use client';
+import { FiCreditCard } from 'react-icons/fi';
 import {
   App, DatePicker, Input, Tag, Badge, Tooltip, Modal, Empty,
   Spin, Steps, Divider, Statistic, Card, Row, Col, Space,
@@ -941,9 +942,8 @@ const AddPaymentModal = () => {
         type="primary"
         title="Add Payment"
         onClick={showDrawer}
-        icon={<PlusOutlined />}
+        icon={<FiCreditCard />}
         size="middle"
-        className="bg-gradient-to-r from-green-500 to-blue-500 border-0 shadow-lg hover:shadow-xl transition-all"
       >
         Add Payment
       </Button>

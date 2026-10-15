@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from "@/lib/AuthProvider";
 import { can as canDo, pageModule } from "@/lib/permissions";
@@ -26,14 +26,14 @@ const LoadingScreen = () => (
       @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&display=swap');
       .loading-root {
         min-height: 100vh;
-        background: #f8fafc;
+        background: var(--page-bg);
         display: flex;
         font-family: 'Outfit', sans-serif;
       }
       /* Fake sidebar */
       .loading-sidebar {
         width: 72px;
-        background: linear-gradient(180deg, #0f172a 0%, #0a1020 100%);
+        background: linear-gradient(180deg, var(--sb-bg1) 0%, var(--sb-bg2) 100%);
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -86,7 +86,7 @@ const LoadingScreen = () => (
       .spinner-ring {
         width: 20px; height: 20px;
         border: 2px solid rgba(59,130,246,0.2);
-        border-top-color: #3b82f6;
+        border-top-color: var(--brand);
         border-radius: 50%;
         animation: spin 0.7s linear infinite;
         flex-shrink: 0;
@@ -97,7 +97,7 @@ const LoadingScreen = () => (
     <div className="loading-root">
       {/* Fake sidebar */}
       <div className="loading-sidebar">
-        <div className="loading-sidebar-icon" style={{ background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)' }} />
+        <div className="loading-sidebar-icon" style={{ background: 'linear-gradient(135deg, var(--brand), var(--brand-hover))' }} />
         {[...Array(6)].map((_, i) => (
           <div key={i} className="loading-sidebar-dot" style={{ opacity: 1 - i * 0.12 }} />
         ))}
@@ -313,7 +313,7 @@ export default function CustomDashboardLayout({ children }) {
           display: flex;
           height: 100vh;
           overflow: hidden;
-          background: #f1f5f9;
+          background: var(--page-bg);
           font-family: 'Outfit', sans-serif;
         }
 
@@ -405,8 +405,8 @@ export default function CustomDashboardLayout({ children }) {
         .page-card {
           background: #fff;
           border-radius: 16px;
-          border: 1px solid #f1f5f9;
-          box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.03);
+          border: 1px solid var(--tb-border);
+          box-shadow: 0 1px 2px rgba(15,23,42,0.04), 0 8px 24px rgba(15,23,42,0.04);
           padding: 24px;
           min-height: calc(100vh - 140px);
         }
@@ -425,14 +425,14 @@ export default function CustomDashboardLayout({ children }) {
       <div className="layout-root">
         {/* Desktop Sidebar */}
         <div className="desktop-sidebar">
-          <SideBar collapsed={sidebarCollapsed} />
+          <Suspense fallback={null}><SideBar collapsed={sidebarCollapsed} /></Suspense>
         </div>
 
         {/* Mobile Sidebar Drawer */}
         <div className={`mobile-overlay ${mobileSidebarOpen ? 'open' : ''}`}>
           <div className="mobile-backdrop" onClick={() => setMobileSidebarOpen(false)} />
           <div className="mobile-drawer">
-            <SideBar collapsed={false} onClose={() => setMobileSidebarOpen(false)} />
+            <Suspense fallback={null}><SideBar collapsed={false} onClose={() => setMobileSidebarOpen(false)} /></Suspense>
             <button
               className="mobile-close-btn"
               onClick={() => setMobileSidebarOpen(false)}

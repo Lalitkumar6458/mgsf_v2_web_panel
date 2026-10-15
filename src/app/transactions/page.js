@@ -6,7 +6,7 @@ import { fetchAllTransactions } from '@/lib/services/firebaseService';
 import { api } from '@/lib/client/api';
 import {
   Button, Space, Modal, App, Card, Row, Col, DatePicker, Select, Input,
-  Tag, Tooltip, Divider, Typography, Alert, Drawer, Segmented, Badge, Table,
+  Tag, Tooltip, Divider, Typography, Alert, Drawer, Segmented, Badge, Table, Progress, Spin,
 } from 'antd';
 import {
   DeleteOutlined, EyeOutlined, DownloadOutlined, ReloadOutlined, DollarOutlined,
@@ -15,9 +15,7 @@ import {
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import isBetween from 'dayjs/plugin/isBetween';
-import { PDFDownloadLink, PDFViewer } from '@react-pdf/renderer';
 import dynamic from 'next/dynamic';
-import TransactionsReportPDF from '@/components/pdfcom/TransactionsReportPDF';
 import { amountsHidden, useAmountsHidden, MASK, AmountsEye } from "@/lib/client/privacy";
 
 const AddPaymentModal = dynamic(
@@ -36,6 +34,7 @@ const QUICK_RANGES = {
   today: { label: 'Today',      start: () => dayjs().startOf('day'),   end: () => dayjs().endOf('day') },
   week:  { label: 'This Week',  start: () => dayjs().startOf('week'),  end: () => dayjs().endOf('week') },
   month: { label: 'This Month', start: () => dayjs().startOf('month'), end: () => dayjs().endOf('month') },
+  months3: { label: 'Last 3 Months', start: () => dayjs().subtract(2, 'month').startOf('month'), end: () => dayjs().endOf('day') },
   custom: { label: 'Custom', start: null, end: null },
 };
 
@@ -88,7 +87,6 @@ const TransactionsPage = () => {
   const { user } = useAuth();
   const { message: antdMessage, modal } = App.useApp();
   const selectedProgram = useSelector((state) => state.data.selectedProgram);
-   const TrustData = useSelector((state) => state.data.trustData);
   const programRef = useRef(selectedProgram);
 
   const [transactions, setTransactions]   = useState([]);
@@ -107,6 +105,10 @@ const TransactionsPage = () => {
     cashCount: 0, onlineCount: 0, cashAmount: 0, onlineAmount: 0
   });
   const searchTimer = useRef(null);
+  // server-made PDF: { status: 'idle'|'loading'|'done'|'error', url, error, rows, startedAt }
+  const [pdfState, setPdfState] = useState({ status: 'idle' });
+  const pdfAbort = useRef(null);
+  const [pdfTick, setPdfTick] = useState(0);
 
   // Derived date range
   const { rangeStart, rangeEnd } = useMemo(() => {
@@ -226,6 +228,59 @@ const TransactionsPage = () => {
     const p = selectedProgram?.name?.replace(/\s+/g, '_') || 'Program';
     return `${p}_Transactions_${transactions.length}_${dayjs().format('DDMMYYYY')}.pdf`;
   }, [selectedProgram, transactions.length]);
+
+  // ── PDF: drawn on the server (worker thread) so the browser never freezes ──
+  const closePdf = useCallback(() => {
+    pdfAbort.current?.abort();
+    pdfAbort.current = null;
+    setPdfDrawerOpen(false);
+    setPdfState((cur) => { if (cur.url) URL.revokeObjectURL(cur.url); return { status: 'idle' }; });
+  }, []);
+
+  const makePdf = useCallback(async () => {
+    const program = programRef.current;
+    if (!program || !transactions.length) { antdMessage.warning('No data'); return; }
+    pdfAbort.current?.abort();
+    const ctrl = new AbortController();
+    pdfAbort.current = ctrl;
+    setPdfDrawerOpen(true);
+    setPdfState((cur) => { if (cur.url) URL.revokeObjectURL(cur.url); return { status: 'loading', rows: transactions.length, startedAt: Date.now() }; });
+    const qs = new URLSearchParams();
+    if (rangeStart && rangeEnd) { qs.set('from', rangeStart.format('YYYY-MM-DD')); qs.set('to', rangeEnd.format('YYYY-MM-DD')); }
+    if (searchKeyword) qs.set('q', searchKeyword);
+    if (paymentMethod !== 'all') qs.set('method', paymentMethod);
+    try {
+      const res = await fetch(`/api/programs/${program.id}/transactions/report?${qs}`, { credentials: 'include', signal: ctrl.signal });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || `PDF nahi bana (${res.status})`);
+      }
+      const blob = await res.blob();
+      if (ctrl.signal.aborted) return;
+      setPdfState({ status: 'done', url: URL.createObjectURL(blob), rows: Number(res.headers.get('X-Rows')) || transactions.length, size: blob.size });
+    } catch (e) {
+      if (e.name === 'AbortError') return;
+      setPdfState({ status: 'error', error: e.message || 'PDF nahi bana' });
+    } finally {
+      if (pdfAbort.current === ctrl) pdfAbort.current = null;
+    }
+  }, [transactions.length, rangeStart, rangeEnd, searchKeyword, paymentMethod, antdMessage]);
+
+  // elapsed-time ticker while the PDF is being made
+  useEffect(() => {
+    if (pdfState.status !== 'loading') return;
+    const t = setInterval(() => setPdfTick((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, [pdfState.status]);
+  useEffect(() => () => pdfAbort.current?.abort(), []);
+
+  const downloadPdf = () => {
+    if (!pdfState.url) return;
+    const a = document.createElement('a');
+    a.href = pdfState.url;
+    a.download = getFileName();
+    a.click();
+  };
 
   const resetFilters = () => {
     setQuickRange('today'); setCustomRange(null);
@@ -400,18 +455,6 @@ const TransactionsPage = () => {
     );
   }
 
-  const pdfProps = {
-    transactions,
-    summary,
-    programInfo: selectedProgram,
-    filters: {
-      dateRange: rangeStart ? { start: rangeStart.format('DD/MM/YYYY'), end: rangeEnd.format('DD/MM/YYYY') } : null,
-      paymentMethod,
-      searchText: searchKeyword,
-    },
-    generatedDate: dayjs().format('DD/MM/YYYY HH:mm:ss'),
-  };
-
   return (
     <div style={{ padding: '12px 16px' }}>
 
@@ -471,6 +514,7 @@ const TransactionsPage = () => {
               { label: 'Today',  value: 'today' },
               { label: 'Week',   value: 'week' },
               { label: 'Month',  value: 'month' },
+              { label: '3 Months', value: 'months3' },
               { label: 'Custom', value: 'custom' },
             ]}
           />
@@ -522,7 +566,7 @@ const TransactionsPage = () => {
             </Button>
             <Button
               size="small" type="primary" danger icon={<FilePdfOutlined />}
-              onClick={() => { if (!transactions.length) { antdMessage.warning('No data'); return; } setPdfDrawerOpen(true); }}
+              onClick={makePdf}
               disabled={!transactions.length}
             >
               PDF
@@ -748,26 +792,46 @@ const TransactionsPage = () => {
         }
         width="min(900px, 96vw)"
         placement="right"
-        onClose={() => setPdfDrawerOpen(false)}
+        onClose={closePdf}
         open={pdfDrawerOpen}
         maskClosable={false}
         destroyOnClose
+        styles={{ body: { padding: 0, display: 'flex', flexDirection: 'column' } }}
         footer={
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-            <Button onClick={() => setPdfDrawerOpen(false)} size="large">Cancel</Button>
-            <PDFDownloadLink document={<TransactionsReportPDF {...pdfProps} TrustData={TrustData} />} fileName={getFileName()}>
-              {({ loading: pdfLoading }) => (
-                <Button type="primary" danger icon={<DownloadOutlined />} size="large" loading={pdfLoading} disabled={!transactions.length}>
-                  Download PDF ({transactions.length} records)
-                </Button>
-              )}
-            </PDFDownloadLink>
+            <Button onClick={closePdf} size="large">{pdfState.status === 'loading' ? 'Cancel' : 'Close'}</Button>
+            {pdfState.status === 'error' && <Button size="large" icon={<ReloadOutlined />} onClick={makePdf}>Dobara try karein</Button>}
+            <Button type="primary" danger icon={<DownloadOutlined />} size="large"
+              loading={pdfState.status === 'loading'} disabled={pdfState.status !== 'done'} onClick={downloadPdf}>
+              Download PDF ({(pdfState.rows || transactions.length).toLocaleString('en-IN')} records)
+            </Button>
           </div>
         }
       >
-        <PDFViewer style={{ width: '100%', height: 'calc(100vh - 130px)', border: 'none' }}>
-          <TransactionsReportPDF {...pdfProps} TrustData={TrustData} />
-        </PDFViewer>
+        {pdfState.status === 'loading' && (() => {
+          const est = Math.max(3, Math.round((pdfState.rows || 0) * 0.0004) + 3); // ≈ 0.35 ms per row on the server + download
+          const sec = Math.floor((Date.now() - (pdfState.startedAt || Date.now())) / 1000);
+          return (
+            <div key={pdfTick} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14, padding: 32, textAlign: 'center' }}>
+              <Spin size="large" />
+              <div style={{ fontSize: 15, fontWeight: 600 }}>
+                {(pdfState.rows || 0).toLocaleString('en-IN')} payments ka PDF ban raha hai…
+              </div>
+              <Progress percent={Math.min(95, Math.round((sec / est) * 100))} status="active" style={{ maxWidth: 360 }} showInfo={false} />
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                {sec}s · lagbhag {est}s lagenge. PDF server pe ban raha hai, isliye browser hang nahi hoga.
+              </Text>
+            </div>
+          );
+        })()}
+        {pdfState.status === 'error' && (
+          <div style={{ padding: 24 }}>
+            <Alert type="error" showIcon message="PDF nahi bana" description={pdfState.error} />
+          </div>
+        )}
+        {pdfState.status === 'done' && pdfState.url && (
+          <iframe title="PDF preview" src={pdfState.url} style={{ width: '100%', flex: 1, minHeight: 'calc(100vh - 130px)', border: 'none' }} />
+        )}
       </Drawer>
 
       {/* Table style overrides */}

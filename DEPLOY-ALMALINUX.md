@@ -163,14 +163,21 @@ Naya install (step 7 nahi kiya) to pehla admin login:
 sudo -iu mgsf bash -c 'cd /opt/mgsf_v2 && npm run create-account -- admin trust@yourmail.com "Trust Ka Naam" StrongPass123'
 ```
 
-## 10. Roz ka backup (cron)
+## 10. Backup (roz ka + har deploy se pehle)
 
 ```bash
-sudo -iu mgsf bash -c '(crontab -l 2>/dev/null; echo "0 2 * * * bash /opt/mgsf_v2/scripts/backup.sh >> /opt/mgsf_v2/backups/backup.log 2>&1") | crontab -'
-sudo -iu mgsf bash /opt/mgsf_v2/scripts/backup.sh      # abhi ek test backup
+sudo -iu mgsf bash -c '(crontab -l 2>/dev/null | grep -v scripts/backup.sh; echo "0 2 * * * bash /opt/mgsf_v2/scripts/backup.sh >> /opt/mgsf_v2/backups/backup.log 2>&1") | crontab -'
+sudo -iu mgsf bash /opt/mgsf_v2/scripts/backup.sh manual     # abhi ek test backup
+cat /opt/mgsf_v2/backups/last-backup.txt                     # OK … dikhna chahiye
+bash /opt/mgsf_v2/scripts/restore.sh --test <file>           # backup sach mein wapas lag sakta hai? (live ko nahi chhuta)
 ```
 
-Roz raat 2 baje `backups/mgsf-YYYY-MM-DD.sql.gz` (14 din). **Hafte mein ek baar WinSCP se PC / Google Drive par copy karein** aur hPanel mein VPS snapshot bhi lete rahein.
+- Har backup check hota hai (gzip test + "dump complete"); adhoori file kabhi backup nahi maani jaati.
+- `backups/db/`: roz raat 2 baje (14 din) · har mahine ki 1 tarikh wala (12 mahine) · har deploy se pehle `_predeploy` (aakhri 10).
+- `backups/uploads/`: photos / documents / certificate frame — har Sunday (aakhri 4).
+- `deploy.sh` migration se pehle backup leta hai; backup fail = deploy ruk jaata hai, live site nahi chhuti.
+- Wapas lagana (root se): `bash /opt/mgsf_v2/scripts/restore.sh --list`, phir `bash /opt/mgsf_v2/scripts/restore.sh <file>` — pehle aaj ke data ka `_prerestore` backup leta hai, `YES` likhne par hi chalta hai.
+- **Server se bahar copy zaroori hai** — hafte mein ek baar WinSCP se `backups/` PC / Google Drive par, ya rclone (optional): `.env` mein `BACKUP_RCLONE_REMOTE=gdrive:mgsf-backups` + `mgsf` user se `rclone config`. hPanel VPS snapshot bhi lete rahein.
 
 ---
 
@@ -208,7 +215,7 @@ Ab har `git push` (main) par server khud update ho jayega — GitHub → Actions
 | App restart | `systemctl restart mgsf` |
 | HTTPS / Caddy logs | `journalctl -u caddy -f` |
 | Database console | `sudo -u postgres psql mgsf` |
-| Backup wapas lagana | `gunzip -c /opt/mgsf_v2/backups/mgsf-2026-10-15.sql.gz \| sudo -u postgres psql mgsf` (khaali DB par) |
+| Backup wapas lagana | `bash /opt/mgsf_v2/scripts/restore.sh --list` · `--test <file>` · `<file>` |
 
 ## Problem aaye to
 

@@ -18,3 +18,13 @@ export function programFields(b = {}) {
   if (b.extra && typeof b.extra === "object") out.extra = b.extra;
   return out;
 }
+
+/** Members on books (active + inactive + blocked + closed; not pending, not deleted) — the "asli" count. */
+export async function membersOnBooks(programId) {
+  const { sql } = await import("drizzle-orm");
+  const { db } = await import("../db/index.js");
+  const { rows: [r] } = await db.execute(sql`
+    SELECT count(*)::int AS n FROM members
+    WHERE program_id = ${programId} AND NOT deleted AND status IN ('accepted', 'closed')`);
+  return r?.n || 0;
+}

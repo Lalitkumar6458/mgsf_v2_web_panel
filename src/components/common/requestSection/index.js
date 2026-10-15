@@ -572,7 +572,7 @@ ${values.joinFeesDone ? `Join Fees: ₹${joinFeesPaidAmount}` : 'Join Fees: Pend
           className="flex items-center gap-2 bg-white hover:bg-gray-50 border-gray-300 shadow-sm"
           type="default"
         >
-          <span>REQUESTS</span>
+          <span>Requests</span>
         </Button>
       </Badge>
 

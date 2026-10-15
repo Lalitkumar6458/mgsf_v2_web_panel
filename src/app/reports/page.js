@@ -1,6 +1,7 @@
 "use client";
 // Reports: late / overdue payments, agent performance ranking, one member's payment history.
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
+import { useQueryTab } from "@/lib/client/useQueryTab";
 import { useSelector } from "react-redux";
 import { Tabs, Empty } from "antd";
 import { FiClock, FiAward, FiUser } from "react-icons/fi";
@@ -9,17 +10,20 @@ import AgentPerformance from "@/components/screen/reports/AgentPerformance";
 import MemberHistory from "@/components/screen/reports/MemberHistory";
 
 export default function ReportsPage() {
+  return <Suspense fallback={null}><Reports /></Suspense>;
+}
+
+function Reports() {
   const program = useSelector((s) => s.data.selectedProgram);
-  const [tab, setTab] = useState("late");
+  const [tab, setTab] = useQueryTab("late", ["late", "agents", "member"]);
   const [lateAgent, setLateAgent] = useState(null);
   const [memberId, setMemberId] = useState(null);
 
-  // /reports?member=<id> or ?tab=agents opens straight there
+  // /reports?member=<id> opens that member's history (?tab=… comes from the URL, see useQueryTab)
   useEffect(() => {
     const q = new URLSearchParams(window.location.search);
     if (q.get("member")) { setMemberId(q.get("member")); setTab("member"); }
-    else if (q.get("tab")) setTab(q.get("tab"));
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!program) return <div className="p-6"><Empty description="Upar se yojna chunein" /></div>;
 
