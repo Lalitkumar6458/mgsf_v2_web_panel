@@ -1,0 +1,10 @@
+# /etc/caddy/Caddyfile — HTTPS (free automatic certificate) in front of the app (no Docker)
+# Replace admin.yourtrust.in with your domain (its DNS A record must point to this server).
+admin.yourtrust.in {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:3000 {
+		transport http {
+			read_timeout 10m
+		}
+	}
+}

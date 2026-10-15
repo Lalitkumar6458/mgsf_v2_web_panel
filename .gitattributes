@@ -1,0 +1,5 @@
+# shell scripts / server configs must keep Linux line endings even when committed from Windows
+*.sh text eol=lf
+deploy/* text eol=lf
+*.service text eol=lf
+Caddyfile text eol=lf

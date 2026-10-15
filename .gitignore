@@ -1,0 +1,14 @@
+node_modules
+.next
+.env
+.env.local
+/uploads
+/backups
+firebase-service-account.json
+*.log
+/data
+/migration-output
+/workers
+/.release
+/.release.new
+/.release.old

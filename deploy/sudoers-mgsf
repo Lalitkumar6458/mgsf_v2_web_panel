@@ -1,0 +1,2 @@
+# /etc/sudoers.d/mgsf — lets the app user restart only its own service (used by scripts/deploy.sh)
+mgsf ALL=(root) NOPASSWD: /usr/bin/systemctl restart mgsf, /usr/bin/systemctl status mgsf

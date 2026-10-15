@@ -1,0 +1,24 @@
+# /etc/systemd/system/mgsf.service — the app (no Docker)
+[Unit]
+Description=MGSF trust panel (Next.js)
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=mgsf
+Group=mgsf
+WorkingDirectory=/opt/mgsf_v2/.release
+EnvironmentFile=/opt/mgsf_v2/.env
+Environment=NODE_ENV=production
+Environment=PORT=3000
+Environment=HOSTNAME=127.0.0.1
+Environment=NEXT_TELEMETRY_DISABLED=1
+ExecStart=/usr/bin/node server.js
+Restart=always
+RestartSec=5
+# 4 GB server: keep Node from taking everything
+Environment=NODE_OPTIONS=--max-old-space-size=1536
+
+[Install]
+WantedBy=multi-user.target

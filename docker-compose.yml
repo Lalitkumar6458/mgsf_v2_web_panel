@@ -1,0 +1,60 @@
+# One VPS runs everything:  docker compose up -d
+#   db      PostgreSQL 16 (data in ./data/postgres)
+#   app     Next.js panel + API  (port 3000, behind caddy)
+#   caddy   HTTPS with free automatic certificates (set DOMAIN in .env)
+#   backup  pg_dump every night → ./backups (keeps 14 days); copy that folder off the server too!
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: mgsf
+      POSTGRES_USER: mgsf
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mgsf -d mgsf"]
+      interval: 10s
+      retries: 5
+
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://mgsf:${POSTGRES_PASSWORD}@db:5432/mgsf
+      UPLOAD_DIR: /app/uploads
+    volumes:
+      - ./data/uploads:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro   # HTTPS + gzip/zstd compression
+      - ./data/caddy:/data
+    depends_on: [app]
+
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./backups:/backups
+    entrypoint: >
+      sh -c 'while true; do
+        f=/backups/mgsf-$$(date +%F).sql.gz;
+        pg_dump -h db -U mgsf mgsf | gzip > $$f && echo "backup $$f";
+        find /backups -name "mgsf-*.sql.gz" -mtime +14 -delete;
+        sleep 86400; done'
+    depends_on:
+      db:
+        condition: service_healthy

@@ -1,0 +1,303 @@
+{
+ "users": [
+  {
+   "id": "ADMINUID1",
+   "data": {
+    "email": "Trust@MGSF.in",
+    "displayName": "Old Trust",
+    "phone": "98"
+   },
+   "authEmail": "",
+   "organizations": [
+    {
+     "id": "trustInfo",
+     "trustName": "MGSF",
+     "regNo": "123",
+     "createdAt": {
+      "_seconds": 1735689600,
+      "_nanoseconds": 0
+     }
+    }
+   ],
+   "contact": [
+    {
+     "id": "c1",
+     "phone": "111"
+    }
+   ],
+   "policies": [
+    {
+     "id": "p1",
+     "text": "rule"
+    }
+   ],
+   "agents": [
+    {
+     "id": "AG1",
+     "displayName": "Suresh",
+     "email": "suresh@x.in",
+     "password": "sur123",
+     "phone": "9",
+     "active_flags": true,
+     "delete_flags": false,
+     "programCounts": {
+      "P1": 3
+     },
+     "firbaseToken": "abc"
+    },
+    {
+     "id": "AG2",
+     "displayName": "No Mail Agent"
+    }
+   ],
+   "programs": [
+    {
+     "id": "P1",
+     "name": "Vivah",
+     "regPrefix": "R",
+     "regMode": "random",
+     "memberCount": 4,
+     "category": {
+      "isVivah": true
+     },
+     "ageGroups": [
+      {
+       "id": "g",
+       "startAge": 18,
+       "endAge": 30,
+       "payAmount": 200
+      }
+     ],
+     "_closing_groups": [
+      {
+       "id": "G1",
+       "name": "Jan Group",
+       "members": [
+        {
+         "memberId": "M1"
+        }
+       ],
+       "memberCount": 1
+      }
+     ],
+     "_members": [
+      {
+       "id": "M1",
+       "status": "accepted",
+       "active_flag": true,
+       "delete_flag": false,
+       "payAmount": 200,
+       "createdAt": {
+        "_seconds": 1767225600,
+        "_nanoseconds": 0
+       },
+       "displayName": "Amit",
+       "registrationNumber": "R100001",
+       "dateJoin": "01-01-2026",
+       "agentId": "AG1",
+       "marriage_flag": true,
+       "marriage_date": "15-02-2026",
+       "closing_date": "15-02-2026",
+       "closingAt": {
+        "_seconds": 1771149600,
+        "_nanoseconds": 0
+       },
+       "closingGroupId": "G1",
+       "guardian": "Sita",
+       "guardianRelation": "\u092e\u093e\u0924\u093e",
+       "password": "amit1998",
+       "photoURL": "https://firebasestorage/a.jpg",
+       "search_keywords": [
+        "a",
+        "am"
+       ],
+       "someOldField": "keep me"
+      },
+      {
+       "id": "M2",
+       "status": "accepted",
+       "active_flag": true,
+       "delete_flag": false,
+       "payAmount": 200,
+       "createdAt": {
+        "_seconds": 1767225600,
+        "_nanoseconds": 0
+       },
+       "displayName": "Bharat",
+       "registrationNumber": "R100002",
+       "dateJoin": "01-02-2026",
+       "agentId": "AG1",
+       "bobDate": "01-01-2000"
+      },
+      {
+       "id": "M3",
+       "status": "blocked",
+       "active_flag": true,
+       "delete_flag": false,
+       "payAmount": 200,
+       "createdAt": {
+        "_seconds": 1772341200,
+        "_nanoseconds": 0
+       },
+       "displayName": "Chetan",
+       "registrationNumber": "R100003",
+       "dateJoin": "bad-date",
+       "agentId": "AGX"
+      },
+      {
+       "id": "M4",
+       "status": "pending",
+       "active_flag": true,
+       "delete_flag": false,
+       "payAmount": 200,
+       "createdAt": {
+        "_seconds": 1767225600,
+        "_nanoseconds": 0
+       },
+       "displayName": "Dinesh",
+       "dateJoin": "05-01-2026",
+       "agentId": "AG1"
+      },
+      {
+       "id": "M5",
+       "status": "accepted",
+       "active_flag": true,
+       "delete_flag": false,
+       "payAmount": 200,
+       "createdAt": {
+        "_seconds": 1767225600,
+        "_nanoseconds": 0
+       },
+       "displayName": "Esha",
+       "registrationNumber": "R100002",
+       "dateJoin": "01-01-2026",
+       "marriage_flag": true,
+       "marriage_date": ""
+      }
+     ],
+     "_payment_pending": [
+      {
+       "id": "M1_M2",
+       "closingMemberId": "M1",
+       "memberId": "M2",
+       "status": "paid",
+       "payAmount": 200,
+       "paidAmount": 200,
+       "memberDetails": {
+        "agentId": "AG1"
+       },
+       "delete_flag": false,
+       "createdAt": {
+        "_seconds": 1771113600,
+        "_nanoseconds": 0
+       }
+      },
+      {
+       "id": "M1_M1",
+       "closingMemberId": "M1",
+       "memberId": "M1",
+       "status": "pending",
+       "payAmount": 200,
+       "delete_flag": false
+      },
+      {
+       "id": "M1_M5",
+       "closingMemberId": "M1",
+       "memberId": "M5",
+       "status": "pending",
+       "payAmount": 200,
+       "delete_flag": false
+      },
+      {
+       "id": "M1_M5b",
+       "closingMemberId": "M1",
+       "memberId": "M5",
+       "status": "partial",
+       "payAmount": 200,
+       "paidAmount": 50,
+       "delete_flag": false
+      },
+      {
+       "id": "M1_GONE",
+       "closingMemberId": "M1",
+       "memberId": "GONE",
+       "status": "pending",
+       "delete_flag": false
+      },
+      {
+       "id": "M1_M3",
+       "closingMemberId": "M1",
+       "memberId": "M3",
+       "status": "pending",
+       "delete_flag": true
+      }
+     ],
+     "_transactions": [
+      {
+       "id": "TX1",
+       "payerId": "M2",
+       "closingMemberId": "M1",
+       "amount": 200,
+       "paymentMethod": "cash",
+       "paymentDate": "2026-02-20",
+       "transactionNumber": "TRX-1-ABC-001",
+       "batchId": "BATCH-ABC",
+       "paymentPendingId": "M1_M2",
+       "delete_flag": false,
+       "transactionType": "marriage_payment",
+       "createdAt": {
+        "_seconds": 1771545600,
+        "_nanoseconds": 0
+       }
+      },
+      {
+       "id": "TX2",
+       "payerId": "M5",
+       "closingMemberId": "M1",
+       "amount": 50,
+       "paymentMethod": "online",
+       "onlineReference": "UPI9",
+       "paymentDate": "2026-02-21",
+       "transactionNumber": "TRX-1-ABC-001",
+       "paymentPendingId": "M1_M5b",
+       "delete_flag": false,
+       "createdAt": {
+        "_seconds": 1771632000,
+        "_nanoseconds": 0
+       }
+      },
+      {
+       "id": "TX3",
+       "payerId": "M2",
+       "closingMemberId": "M1",
+       "amount": 200,
+       "paymentDate": "2026-02-22",
+       "delete_flag": true
+      }
+     ],
+     "_join_fees": [
+      {
+       "id": "JF1",
+       "memberId": "M2",
+       "amount": 500,
+       "paymentMode": "cash",
+       "paymentDate": {
+        "_seconds": 1767225600,
+        "_nanoseconds": 0
+       },
+       "createdBy": "ADMINUID1",
+       "agentId": "AG1",
+       "createdByName": "Suresh"
+      },
+      {
+       "id": "JF2",
+       "memberId": "GONE",
+       "amount": 100,
+       "paymentMode": "upi"
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}
