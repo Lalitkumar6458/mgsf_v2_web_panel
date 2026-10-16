@@ -1,5 +1,7 @@
 # Bina Docker ke deploy — Hostinger VPS (AlmaLinux 9) + GitHub
 
+> **Naya server?** Ye saare steps ab ek script karti hai: **`DEPLOY-NEW-SERVER.md`** dekhein (`scp` + `ssh`, bas 2 command). Neeche wale steps sirf samajhne ke liye hain, ya jab script na chale.
+
 Server: **AlmaLinux 9, KVM 1 (4 GB RAM)**, IP `89.116.33.200`.
 Server par chalega: **Node 22** (app) · **PostgreSQL 16** (database) · **Caddy** (HTTPS) · **systemd** (app hamesha chalu) · **cron** (roz backup).
 Update ka tarika: **GitHub par push → server par ek command** (`bash scripts/deploy.sh`), ya GitHub Actions se apne aap.

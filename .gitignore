@@ -17,3 +17,6 @@ firebase-service-account.json
 /*.sql
 /*.sql.gz
 /*.dump
+
+# apne servers ki list (IP) — sirf PC par
+/deploy/servers.txt

@@ -8,10 +8,14 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 APP_DIR="$(pwd)"
-SERVICE="${SERVICE:-mgsf}"
 
 echo "▶ $(date '+%F %T')  deploying in $APP_DIR"
 [ -f .env ] || { echo "✖ .env missing in $APP_DIR"; exit 1; }
+envval() { { grep -E "^$1=" .env || true; } | tail -1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$//'; }
+# server-setup.sh writes APP_NAME / PORT into .env; old servers without them: mgsf / 3000
+APP_NAME="$(envval APP_NAME)"
+SERVICE="${SERVICE:-${APP_NAME:-mgsf}}"
+PORT="${PORT:-$(envval PORT)}"; PORT="${PORT:-3000}"
 
 if [ -d .git ] && [ "${SKIP_PULL:-0}" != "1" ]; then
   echo "▶ git pull"
@@ -42,8 +46,8 @@ echo "▶ switch release + restart $SERVICE"
 rm -rf .release.old; [ -d .release ] && mv .release .release.old; mv .release.new .release
 if command -v systemctl >/dev/null 2>&1 && { [ -f "/etc/systemd/system/$SERVICE.service" ] || systemctl list-unit-files --no-legend "$SERVICE.service" 2>/dev/null | grep -q .; }; then
   sudo systemctl restart "$SERVICE"
-  sleep 4
-  if curl -fsS "http://127.0.0.1:${PORT:-3000}/api/health" >/dev/null; then
+  ok=0; for i in $(seq 1 15); do sleep 2; curl -fsS "http://127.0.0.1:$PORT/api/health" >/dev/null 2>&1 && { ok=1; break; }; done
+  if [ "$ok" = 1 ]; then
     echo "✔ deployed — app is up"
   else
     echo "✖ app did not answer on /api/health — check: sudo journalctl -u $SERVICE -n 80 --no-pager"
@@ -53,10 +57,7 @@ else
   # never report success while an old app process keeps serving the old build
   echo "✖ systemd service '$SERVICE' is not installed, so the app was NOT restarted."
   echo "  The old app is still running and the site will break (new pages, old server)."
-  echo "  Fix once, as root:"
-  echo "    cp $APP_DIR/deploy/mgsf.service /etc/systemd/system/$SERVICE.service"
-  echo "    cp $APP_DIR/deploy/sudoers-mgsf /etc/sudoers.d/mgsf && chmod 440 /etc/sudoers.d/mgsf"
-  echo "    pkill -f 'node server.js'; systemctl daemon-reload && systemctl enable --now $SERVICE"
+  echo "  Fix once, as root:  bash $APP_DIR/scripts/server-setup.sh   (it writes the service and keeps your .env)"
   exit 1
 fi
 exit 0

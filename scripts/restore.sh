@@ -10,11 +10,14 @@
 # <file> = a name from --list (mgsf-2026-10-15_0200.sql.gz) or a full path.
 set -euo pipefail
 APP="$(cd "$(dirname "$0")/.." && pwd)"
-APP_USER="${APP_USER:-mgsf}"
-SERVICE="${SERVICE:-mgsf}"
 B="$APP/backups/db"
 
 envval() { { grep -E "^$1=" "$APP/.env" || true; } | tail -1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//"; }
+# server-setup.sh writes APP_NAME / PORT into .env (one name = linux user = service); old servers: mgsf / 3000
+APP_NAME="$(envval APP_NAME)"
+APP_USER="${APP_USER:-${APP_NAME:-mgsf}}"
+SERVICE="${SERVICE:-${APP_NAME:-mgsf}}"
+PORT="${PORT:-$(envval PORT)}"
 URL="$(envval DATABASE_URL)"
 [ -n "$URL" ] || { echo "✖ DATABASE_URL not found in $APP/.env"; exit 1; }
 rest="${URL#*://}"; creds="${rest%%@*}"; DB_USER="${creds%%:*}"

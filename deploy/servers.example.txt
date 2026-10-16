@@ -1,0 +1,5 @@
+# Saare server jinpar ye panel chalta hai — deploy-all.ps1 inko ek-ek karke update karta hai.
+# Is file ko copy karke  deploy/servers.txt  banayein (wo GitHub par nahi jaati).
+# Format:   ssh-login        app-naam   [folder]          (folder na likhein to /opt/<app-naam>)
+root@89.116.33.200   mgsf    /opt/mgsf_v2
+# root@1.2.3.4       gsmmf
