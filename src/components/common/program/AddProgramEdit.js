@@ -3,7 +3,7 @@ import { Button, Drawer, Form, Input, InputNumber, Select, Space, Card, Typograp
 import { FiPlusCircle, FiTrash2, FiUser, FiMapPin, FiDollarSign, FiCalendar, FiTag, FiEdit2, FiSave, FiHash } from 'react-icons/fi';
 import { REG_DEFAULTS, previewRegistrationNumbers } from '@/lib/helper';
 import { COUNT_MODES, displayCount, normalizeCountDisplay } from '@/lib/memberCountDisplay';
-import { useAuth } from '@/lib/AuthProvider';
+import { useAuth, useFeature } from '@/lib/AuthProvider';
 import { api } from "@/lib/client/api";
 import { setgetMemberDataChange, setPrograms } from '@/redux/slices/commonSlice';
 import { useDispatch, useSelector } from 'react-redux';
@@ -15,6 +15,7 @@ const AddProgramEdit = ({ program, mode = 'add', onSuccess, triggerButton = null
   const { message: antdMessage } = App.useApp();
   const [form] = Form.useForm();
   const { user } = useAuth();
+  const countOn = useFeature()('countDisplay');
   const [loading, setLoading] = useState(false);
   const [isSelected, setIsSelected] = useState(false);
   const dispatch=useDispatch()
@@ -550,8 +551,8 @@ const AddProgramEdit = ({ program, mode = 'add', onSuccess, triggerButton = null
               </div>
             </Card>
 
-            {/* Member count display */}
-            <Card className="border border-gray-200">
+            {/* Member count display (kept mounted when the feature is off so the saved setting is not lost) */}
+            <Card className="border border-gray-200" hidden={!countOn}>
               <Title level={5} className="!mb-1 flex items-center gap-2">
                 <FiUser className="text-indigo-600" />
                 Member count kaise dikhe

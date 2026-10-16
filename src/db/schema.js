@@ -417,3 +417,51 @@ export const certificateTemplates = pgTable("certificate_templates", {
 }, (t) => [
   index("certificate_templates_admin_idx").on(t.adminId),
 ]);
+
+// ─── Audit log, cash handover, receipt register (migration 0009) ────────────
+// audit_logs: every change made from the panel (who, what, when) — see src/services/audit.js.
+export const auditLogs = pgTable("audit_logs", {
+  id: text("id").primaryKey(), // bigserial in SQL; read as text
+  adminId: text("admin_id").notNull().references(() => admins.id, { onDelete: "cascade" }),
+  accountId: str("account_id"),
+  actorName: str("actor_name"),
+  actorRole: str("actor_role"),
+  action: text("action").notNull(),
+  entity: str("entity"),
+  entityId: str("entity_id"),
+  summary: str("summary"),
+  details: json("details", {}),
+  ip: str("ip"),
+  createdAt: createdAt(),
+});
+
+// cash_handovers: money an agent handed to the trust (agent cash reconciliation).
+export const cashHandovers = pgTable("cash_handovers", {
+  id: id(),
+  adminId: text("admin_id").notNull().references(() => admins.id, { onDelete: "cascade" }),
+  programId: text("program_id").notNull().references(() => programs.id, { onDelete: "cascade" }),
+  agentId: text("agent_id").notNull(),
+  amount: integer("amount").notNull(),
+  handedOn: day("handed_on").notNull(),
+  mode: text("mode").notNull().default("cash"),
+  note: str("note"),
+  receivedBy: str("received_by"),
+  receivedByName: str("received_by_name"),
+  deleted: boolean("deleted").notNull().default(false),
+  createdAt: createdAt(),
+}, (t) => [index("cash_handovers_agent_idx").on(t.programId, t.agentId, t.handedOn)]);
+
+// receipt_register: one row per paid रसीद printed — its number and the dues (closings) on it; the id is the
+// short code in the receipt's verify QR (/verify/r/<id>).
+export const receiptRegister = pgTable("receipt_register", {
+  id: text("id").primaryKey(),
+  adminId: text("admin_id").notNull().references(() => admins.id, { onDelete: "cascade" }),
+  programId: text("program_id").notNull().references(() => programs.id, { onDelete: "cascade" }),
+  memberId: text("member_id").notNull(),
+  receiptNo: str("receipt_no"),
+  amount: integer("amount").notNull().default(0),
+  entries: integer("entries").notNull().default(0),
+  dueIds: json("due_ids", []),
+  createdBy: str("created_by"),
+  createdAt: createdAt(),
+}, (t) => [index("receipt_register_member_idx").on(t.programId, t.memberId)]);

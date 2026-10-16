@@ -1,6 +1,7 @@
 "use client";
 
 import { FiUserPlus } from 'react-icons/fi';
+import DuplicateWarning from '@/components/common/DuplicateWarning';
 import React, { useState, useEffect } from 'react';
 import { Button, Drawer, Select, Form, Input, DatePicker, Upload, Card, Row, Col, Divider, Space, Typography, App, Spin, Checkbox, Modal, AutoComplete } from 'antd';
 import {
@@ -967,6 +968,7 @@ const checkApplicationNumberDuplicate = async (appNumber, programId) => {
 
                 {/* व्यक्तिगत जानकारी */}
                 <Divider orientation="left">व्यक्तिगत जानकारी</Divider>
+            <DuplicateWarning form={form} />
 
                 <Row gutter={16}>
                   <Col xs={24} sm={12} lg={8}>

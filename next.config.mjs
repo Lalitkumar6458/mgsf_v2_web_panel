@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: "standalone", // small Docker image
-  serverExternalPackages: ["pg", "bcryptjs", "@react-pdf/renderer", "pdfkit"],
+  serverExternalPackages: ["pg", "bcryptjs", "@react-pdf/renderer", "pdfkit", "qrcode"],
   // pdfkit loads its built-in fonts / data with dynamic requires the standalone tracer misses
   outputFileTracingIncludes: {
     "/**": ["./node_modules/pdfkit/js/**", "./node_modules/@react-pdf/**", "./node_modules/fontkit/**"],

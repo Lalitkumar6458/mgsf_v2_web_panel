@@ -32,6 +32,7 @@ export const IMAGE_FIELDS = [
   { key: 'trust.logo', label: 'ट्रस्ट लोगो / Trust logo' },
   { key: 'trust.RightLogo', label: 'दायाँ लोगो / Right logo' },
   { key: 'trust.stampImg', label: 'ट्रस्ट मुहर / Trust stamp' },
+  { key: 'verifyQr', label: 'जाँच QR / Verify QR (scan → asli hai ya nahi)' },
 ];
 
 /* ── Fields the builder offers ───────────────────────────────────────────── */
@@ -350,6 +351,8 @@ export const makeElement = (type, at = { x: 200, y: 300 }) => {
       return { ...base, ...ELEMENT_DEFAULTS, type: 'image', id: newId('image'), fieldKey: 'trust.logo', w: 96, h: 96, fit: 'contain', bg: 'transparent' };
     case 'trustStamp':
       return { ...base, ...ELEMENT_DEFAULTS, type: 'image', id: newId('image'), fieldKey: 'trust.stampImg', w: 110, h: 110, fit: 'contain', bg: 'transparent' };
+    case 'verifyQr':
+      return { ...base, ...ELEMENT_DEFAULTS, type: 'image', id: newId('image'), fieldKey: 'verifyQr', w: 90, h: 90, fit: 'contain', bg: '#ffffff' };
     case 'picture':
       return { ...base, ...ELEMENT_DEFAULTS, src: at.src || '', w: at.w || 140, h: at.h || 90, fit: 'contain', name: at.name || 'इमेज' };
     case 'line':

@@ -319,7 +319,13 @@ watermark: {
   return (num / 100).toFixed(2);
 }
 
-const RegFormPdf = ({data, selectedProgram, TrustData}) => {
+// blank: a form to print and fill by hand (no member yet) — every value empty, amounts as dotted lines
+const BLANK_KEYS = ['registrationNumber', 'photoURL', 'extraImageURL', 'dateJoin', 'displayName', 'fatherName', 'gotra', 'bobDate', 'phone',
+  'aadhaarNo', 'guardianAadharNo', 'village', 'district', 'state', 'guardian', 'guardianRelation', 'ageGroupRange', 'locationGroup', 'addedByName', 'agentPhone'];
+export const BLANK_MEMBER = { __blank: true, joinFeesDone: true, ...Object.fromEntries(BLANK_KEYS.map((k) => [k, ''])) };
+
+const RegFormPdf = ({data: rawData, selectedProgram = {}, TrustData}) => {
+  const data = rawData || BLANK_MEMBER;
   const TrsutData = TrustData && TrustData.name !== undefined ? TrustData : normalizeTrust(TrustData);
   return (
     <Document>
@@ -486,7 +492,7 @@ const RegFormPdf = ({data, selectedProgram, TrustData}) => {
               <View style={[styles.twoColumnRow,{width:'100%'}]}>
                 <View style={styles.halfField}>
                   <Text style={styles.label}>सदस्यता शुल्क:</Text>
-                  <Text style={styles.amountValue}>₹{formatToHundreds(data.joinFees)}/- {data.joinFeesDone?'':'बकाया'}</Text>
+                  <Text style={styles.amountValue}>{data.__blank ? '₹ ..................../-' : `₹${formatToHundreds(data.joinFees)}/- ${data.joinFeesDone ? '' : 'बकाया'}`}</Text>
                 </View>
                 <View style={styles.halfField}>
                   <Text style={styles.label}>योजना नाम:</Text>
@@ -499,7 +505,7 @@ const RegFormPdf = ({data, selectedProgram, TrustData}) => {
                 <Text style={styles.amountLabel}>
                   प्रत्येक {selectedProgram.isSuraksha ? 'मृत्यु' : 'विवाह'} पर सहयोग राशि:
                 </Text>
-                <Text style={styles.amountValue}>₹{data.payAmount}/-</Text>
+                <Text style={styles.amountValue}>{data.__blank ? '₹ ............/-' : `₹${data.payAmount}/-`}</Text>
                 <Text style={[styles.amountLabel, { marginLeft: 4 }]}>रुपये</Text>
               </View>
 

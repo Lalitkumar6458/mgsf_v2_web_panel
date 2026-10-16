@@ -25,3 +25,13 @@ export async function assertAgentMembers(auth, programId, memberIds) {
 
 export const clientIp = (request) =>
   (request.headers.get("x-forwarded-for") || "").split(",")[0].trim() || request.headers.get("x-real-ip") || "";
+
+/** The site's public address for links in PDFs / QR codes: PUBLIC_BASE_URL, else what the browser used. */
+export function publicOrigin(request) {
+  const env = String(process.env.PUBLIC_BASE_URL || "").trim().replace(/\/$/, "");
+  if (env && !/your-domain/i.test(env)) return env;
+  const h = request.headers;
+  const host = h.get("x-forwarded-host") || h.get("host");
+  const proto = (h.get("x-forwarded-proto") || "").split(",")[0].trim() || (host?.startsWith("localhost") ? "http" : "https");
+  return host ? `${proto}://${host}` : new URL(request.url).origin;
+}

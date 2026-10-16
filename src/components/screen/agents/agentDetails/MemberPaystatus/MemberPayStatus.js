@@ -1,5 +1,6 @@
 "use client";
-import { useAuth } from '@/lib/AuthProvider';
+import { useAuth, useFeature } from '@/lib/AuthProvider';
+import { waUrl, reminderText, useTrustUpi } from '@/lib/client/whatsapp';
 import { attachClosingMemberDetails, getAgentMemberPaystatus } from '@/lib/helper';
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
@@ -20,6 +21,7 @@ import PaymentReportPDF from '../component/pdfcom/PaymentReportPDF';
 import { setSelectedProgram } from '@/redux/slices/commonSlice';
 import { fetchClosingGroups as loadClosingGroups } from '@/lib/services/firebaseService';
 import dynamic from 'next/dynamic';
+const WhatsAppIcon = () => <span style={{ color: '#16a34a', fontWeight: 700, fontSize: 12 }}>WA</span>;
 const ReceiptsDrawer = dynamic(() => import('@/components/common/receipts/ReceiptsDrawer'), { ssr: false });
 const { Search } = Input;
 const { Option } = Select;
@@ -30,6 +32,10 @@ const MemberPayStatus = ({ agentId, agentInfo }) => {
   const programList = useSelector((state) => state.data.programList);
   const trustData = useSelector((state) => state.data.trustData);
   const { user } = useAuth();
+  const featureOn = useFeature();
+  const receiptsOn = featureOn('receipts'); // feature lock (developer control page)
+  const waOn = featureOn('whatsapp');
+  const upiId = useTrustUpi();
   const dispatch = useDispatch();
   const [receiptRun, setReceiptRun] = useState(null);   // { status, memberIds, ... } → ReceiptsDrawer
   const [reportData, setReportData] = useState([]);
@@ -532,6 +538,7 @@ const MemberPayStatus = ({ agentId, agentInfo }) => {
                 onClick={() => { setSelectedMember(record); setIsDetailsModalVisible(true); }} />
             </Tooltip>
 
+            {receiptsOn && <>
             <Tooltip title={pendingCount ? `Download ${pendingCount} pending receipt` : 'Koi pending nahi'}>
               <Button
                 size="small"
@@ -560,11 +567,21 @@ const MemberPayStatus = ({ agentId, agentInfo }) => {
                 Paid {paidCount}
               </Button>
             </Tooltip>
+            </>}
+            {waOn && pendingCount > 0 && (() => {
+              const pend = (record.marriages || []).filter((m) => m.status === 'pending');
+              const url = waUrl(record.phone, reminderText({
+                name: record.displayName, trustName: trustData?.name, programName: selectedProgram?.hiname || selectedProgram?.name,
+                count: pend.length, amount: pend.reduce((s, m) => s + (Number(m.amount) || 0), 0), upiId,
+                closings: pend.map((m) => `${m.closingMemberName || m.marriageMemberName || ''} — ₹${m.amount}`),
+              }));
+              return url ? <Tooltip title="WhatsApp pe baki ki yaad"><Button size="small" type="text" icon={<WhatsAppIcon />} href={url} target="_blank" /></Tooltip> : null;
+            })()}
           </div>
         );
       },
     },
-  ], [calculateMemberStats, handleMemberReceipt]);
+  ], [calculateMemberStats, handleMemberReceipt, receiptsOn, waOn, upiId, trustData, selectedProgram]);
 
   const marriageColumns = useMemo(() => [
     {
@@ -642,6 +659,7 @@ const MemberPayStatus = ({ agentId, agentInfo }) => {
             {programList.map((p) => <Option key={p.id} value={p.id}>{p.name}</Option>)}
           </Select>
           <Button icon={<ReloadOutlined />} onClick={loadAgentPaymentData} loading={loading}>Refresh</Button>
+          {receiptsOn && <>
           <Tooltip title="रसीद न. इस नंबर से शुरू होगा (0001, 0002 …)">
             <InputNumber
               min={1}
@@ -664,6 +682,7 @@ const MemberPayStatus = ({ agentId, agentInfo }) => {
               Generate Receipts
             </Button>
           </Dropdown>
+          </>}
         </Space>
       </div>
 

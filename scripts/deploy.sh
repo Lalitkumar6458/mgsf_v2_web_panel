@@ -2,6 +2,9 @@
 # One-command update on the server (no Docker):  bash scripts/deploy.sh
 #   git pull → npm ci → build → database migrations → restart the app service
 # Run as the app user (mgsf) from the project folder. The service restart uses sudo (see DEPLOY-ALMALINUX.md).
+# The whole script sits in one { … } block: bash reads all of it before running anything, so the
+# `git pull` below can replace this very file without bash running a half-old, half-new script.
+{
 set -euo pipefail
 cd "$(dirname "$0")/.."
 APP_DIR="$(pwd)"
@@ -37,7 +40,7 @@ node --env-file=.env scripts/db-migrate.js
 
 echo "▶ switch release + restart $SERVICE"
 rm -rf .release.old; [ -d .release ] && mv .release .release.old; mv .release.new .release
-if command -v systemctl >/dev/null 2>&1 && { [ -f "/etc/systemd/system/$SERVICE.service" ] || systemctl cat "$SERVICE" >/dev/null 2>&1; }; then
+if command -v systemctl >/dev/null 2>&1 && { [ -f "/etc/systemd/system/$SERVICE.service" ] || systemctl list-unit-files --no-legend "$SERVICE.service" 2>/dev/null | grep -q .; }; then
   sudo systemctl restart "$SERVICE"
   sleep 4
   if curl -fsS "http://127.0.0.1:${PORT:-3000}/api/health" >/dev/null; then
@@ -47,5 +50,14 @@ if command -v systemctl >/dev/null 2>&1 && { [ -f "/etc/systemd/system/$SERVICE.
     exit 1
   fi
 else
-  echo "(no systemd service '$SERVICE' — start it with: cd .release && node server.js)"
+  # never report success while an old app process keeps serving the old build
+  echo "✖ systemd service '$SERVICE' is not installed, so the app was NOT restarted."
+  echo "  The old app is still running and the site will break (new pages, old server)."
+  echo "  Fix once, as root:"
+  echo "    cp $APP_DIR/deploy/mgsf.service /etc/systemd/system/$SERVICE.service"
+  echo "    cp $APP_DIR/deploy/sudoers-mgsf /etc/sudoers.d/mgsf && chmod 440 /etc/sudoers.d/mgsf"
+  echo "    pkill -f 'node server.js'; systemctl daemon-reload && systemctl enable --now $SERVICE"
+  exit 1
 fi
+exit 0
+}

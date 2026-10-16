@@ -5,7 +5,7 @@ import { Dropdown, Tooltip } from 'antd';
 import {
   FiGrid, FiUsers, FiBarChart2, FiBookOpen, FiSettings, FiCreditCard, FiLayers, FiChevronDown,
 } from 'react-icons/fi';
-import { useAuth, useCan } from '@/lib/AuthProvider';
+import { useAuth, useCan, useFeature } from '@/lib/AuthProvider';
 import { useSelector } from 'react-redux';
 import { displayName as trustDisplayName, initials as trustInitials } from '@/lib/trust/profile';
 
@@ -15,7 +15,7 @@ import { displayName as trustDisplayName, initials as trustInitials } from '@/li
 
 const OPEN_KEY = 'mgsf.sidebar.open';
 
-function buildMenu(can) {
+function buildMenu(can, feature) {
   const tab = (path, t) => `${path}?tab=${encodeURIComponent(t)}`;
   const groups = [
     { section: 'Main' },
@@ -32,6 +32,7 @@ function buildMenu(can) {
       children: [
         { label: 'Closing payments', link: '/closingPayments', show: can('payments') },
         { label: 'Payment history', link: '/transactions', show: can('payments') },
+        { label: 'Agent cash hisaab', link: '/agentCash', show: can('payments') && feature('cashHandover') },
       ],
     },
     {
@@ -62,8 +63,10 @@ function buildMenu(can) {
       key: 'settings', icon: FiSettings, label: 'Settings',
       children: [
         { label: 'Organization', link: tab('/setting', 'organization'), show: can('settings'), isDefault: true },
-        { label: 'Theme', link: tab('/setting', 'theme'), show: can('settings') },
-        { label: 'Certificate builder', link: tab('/setting', 'certificate'), show: can('settings') },
+        { label: 'Theme', link: tab('/setting', 'theme'), show: can('settings') && feature('theme') },
+        { label: 'Certificate builder', link: tab('/setting', 'certificate'), show: can('settings') && feature('certificateBuilder') },
+        { label: 'Rasid design', link: tab('/setting', 'receipt'), show: can('settings') && feature('receipts') && feature('rasidDesign') },
+        { label: 'Activity log', link: tab('/setting', 'activity'), show: can('settings') && feature('auditLog') },
         { label: 'Rules & policies', link: tab('/setting', 'Rules & Policies'), show: true },
         { label: 'Security', link: tab('/setting', 'security'), show: true },
         { label: 'Contact support', link: tab('/setting', 'contact'), show: true },
@@ -83,7 +86,8 @@ export default function SideBar({ collapsed, onClose }) {
   const search = useSearchParams();
   const { user } = useAuth();
   const can = useCan();
-  const menu = useMemo(() => buildMenu(can), [can]);
+  const feature = useFeature();
+  const menu = useMemo(() => buildMenu(can, feature), [can, feature]);
 
   // is this link the page we are on? (path, and the ?tab= when the link has one)
   const isOn = (child, siblings = []) => {

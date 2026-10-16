@@ -18,7 +18,7 @@ import {
 } from 'react-icons/fi';
 import RequestSection from '../common/requestSection';
 import AddProgram from '../common/program';
-import { useAuth, useCan } from '@/lib/AuthProvider';
+import { useAuth, useCan, useFeature } from '@/lib/AuthProvider';
 import { AmountsEye } from '@/lib/client/privacy';
 import AddAgent from '../screen/agents/AddAgents';
 import { useDispatch, useSelector } from 'react-redux';
@@ -35,6 +35,7 @@ const PAGE_LABELS = {
   'agents': 'Agents',
   'yojna': 'Yojna',
   'closingPayments': 'Closing Payments',
+  'agentCash': 'Agent cash hisaab',
   'closedMembers': 'Closed Members',
   'transactions': 'Payments',
   'setting': 'Settings',
@@ -48,6 +49,7 @@ const TopBar = ({ sidebarCollapsed, toggleSidebar, showNotifications, toggleNoti
   const dispatch = useDispatch();
   const { user, logout: apiLogout } = useAuth();
   const can = useCan();
+  const feature = useFeature();
   const pathname = usePathname();
   const programList = useSelector((state) => state.data.programList);
   const selectedProgram = useSelector((state) => state.data.selectedProgram);
@@ -319,7 +321,7 @@ const TopBar = ({ sidebarCollapsed, toggleSidebar, showNotifications, toggleNoti
                 </div>
                 <div className="py-1">
                   <Link href="/setting" className="menu-link" onClick={toggleUserMenu}><FiSettings size={15} /> Settings</Link>
-                  {can('settings') && <Link href="/setting?tab=theme" className="menu-link" onClick={toggleUserMenu}><FiDroplet size={15} /> Theme / colours</Link>}
+                  {can('settings') && feature('theme') && <Link href="/setting?tab=theme" className="menu-link" onClick={toggleUserMenu}><FiDroplet size={15} /> Theme / colours</Link>}
                 </div>
                 <div style={{ borderTop: '1px solid var(--tb-border)' }} />
                 <button onClick={() => setIsLogoutModalOpen(true)} className="logout-btn">

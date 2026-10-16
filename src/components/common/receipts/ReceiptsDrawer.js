@@ -8,6 +8,8 @@ import { App, Button, DatePicker, Drawer, Empty, InputNumber, Input, Progress, S
 import { FiDownload, FiExternalLink, FiFileText, FiRefreshCw, FiClock, FiCheckCircle, FiAlertTriangle, FiLoader } from "react-icons/fi";
 import dayjs from "dayjs";
 import { api } from "@/lib/client/api";
+import { waUrl, receiptText } from "@/lib/client/whatsapp";
+import { useFeature } from "@/lib/AuthProvider";
 
 const { RangePicker } = DatePicker;
 
@@ -18,7 +20,8 @@ const STATE = {
   error: { color: "error", label: "Failed", icon: <FiAlertTriangle /> },
 };
 
-function JobCard({ job, groups, agents }) {
+function JobCard({ job, groups, agents, trustName, waOn }) {
+  const [showShares, setShowShares] = useState(false);
   const done = job.parts.filter((p) => p.status === "done").length;
   const pct = Math.round((done / job.parts.length) * 100);
   const st = STATE[job.state] || STATE.queued;
@@ -51,6 +54,28 @@ function JobCard({ job, groups, agents }) {
         </div>
       )}
       {job.error && <div className="text-xs text-red-600 mt-2">{job.error}</div>}
+      {waOn && job.shares?.length > 0 && (
+        <div className="mt-2">
+          <button type="button" className="text-xs font-semibold text-green-700" onClick={() => setShowShares((v) => !v)}>
+            {showShares ? "▾" : "▸"} WhatsApp pe rasid ka link bhejein ({job.shares.length})
+          </button>
+          {showShares && (
+            <div className="mt-1.5 max-h-64 overflow-y-auto space-y-1">
+              {job.shares.map((s) => {
+                const url = waUrl(s.phone, receiptText({ name: s.name, trustName, receiptNo: s.receiptNo, amount: s.amount, verifyUrl: s.verifyUrl }));
+                return (
+                  <div key={s.receiptNo} className="flex items-center gap-2 text-xs rounded-lg bg-green-50 px-2.5 py-1.5">
+                    <span className="font-mono text-gray-500 w-14 shrink-0">{s.receiptNo}</span>
+                    <span className="truncate flex-1">{s.name}</span>
+                    <span className="tabular-nums text-gray-600">₹{s.amount.toLocaleString("en-IN")}</span>
+                    {url ? <Button size="small" href={url} target="_blank" style={{ color: "#15803d", borderColor: "#86efac" }}>Bhejein</Button> : <span className="text-gray-400">no mobile</span>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
       <div className="mt-2.5 space-y-1.5">
         {job.parts.map((p) => (
           <div key={p.n} className="flex items-center gap-2 text-xs rounded-lg bg-gray-50 px-2.5 py-1.5">
@@ -88,6 +113,8 @@ export default function ReceiptsDrawer({ open, onClose, defaults = {}, lockAgent
   const program = useSelector((s) => s.data.selectedProgram);
   const groups = useSelector((s) => s.data.closingGroupList) || [];
   const agents = useSelector((s) => s.data.agentsList) || [];
+  const trust = useSelector((s) => s.data.trustData);
+  const waOn = useFeature()("whatsapp");
 
   const [status, setStatus] = useState(defaults.status || "pending");
   const [groupId, setGroupId] = useState(defaults.closingGroupId);
@@ -212,7 +239,7 @@ export default function ReceiptsDrawer({ open, onClose, defaults = {}, lockAgent
           <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Recent runs</div>
           {jobs.length === 0
             ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No receipts made in the last 24 hours" />
-            : jobs.map((j) => <JobCard key={j.id} job={j} groups={groups} agents={agents} />)}
+            : jobs.map((j) => <JobCard key={j.id} job={j} groups={groups} agents={agents} trustName={trust?.name} waOn={waOn} />)}
         </div>
       </div>
     </Drawer>

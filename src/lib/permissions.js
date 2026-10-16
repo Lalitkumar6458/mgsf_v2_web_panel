@@ -56,6 +56,7 @@ export const ROLE_TEMPLATES = [
  */
 export function can(access, module, action = "view") {
   if (!access) return false;
+  if (access.off?.includes(module)) return false; // switched off for the whole trust (lib/features.js)
   if (access.isSuper) return true;
   return !!access.permissions?.[module]?.includes(action);
 }
@@ -68,6 +69,7 @@ export const PAGE_MODULES = [
   ["/closedMembers", "closings"],
   ["/closingPayments", "payments"],
   ["/transactions", "payments"],
+  ["/agentCash", "payments"],
   ["/master", "master"],
   ["/reports", "reports"],
   ["/setting", null], // settings page itself: everyone (password / sessions); its tabs check their own module
@@ -100,6 +102,7 @@ export function apiPermission(method, pathname) {
   if (is(/^\/programs$/) || is(/^\/programs\/[^/]+$/)) return read ? null : { module: "yojna", action: act };
   if (is(/^\/master-data(\/|$)/)) return read ? null : { module: "master", action: act };
   if (is(/^\/(users|roles)(\/|$)/)) return { module: "users", action: act };
+  if (is(/^\/audit$/)) return { module: "settings", action: "view" };
 
   if (is(/^\/programs\/[^/]+\/(analytics|dashboard)$/)) return { module: "dashboard", action: "view" };
   if (is(/^\/programs\/[^/]+\/reports\//)) return { module: "reports", action: "view" };
@@ -129,17 +132,18 @@ export function apiPermission(method, pathname) {
   }
 
   // payments, join fees, receipts
+  if (is(/^\/programs\/[^/]+\/cash-handovers(\/[^/]+)?$/)) return { module: "payments", action: read ? "view" : m === "DELETE" ? "delete" : "add" };
   if (is(/^\/transactions\/[^/]+\/reverse$/)) return { module: "payments", action: "delete" };
   if (is(/^\/join-fees\/[^/]+$/)) return { module: "payments", action: "delete" };
   if (is(/^\/programs\/[^/]+\/(payments|join-fees|receipts)$/) || is(/^\/payments\/process$/)) return { module: "payments", action: "add" };
   if (is(/^\/programs\/[^/]+\/transactions(\/report)?$/) || is(/^\/payments\/fetch$/) || is(/^\/receipts(\/|$)/)) return { module: "payments", action: "view" };
   // certificate builder: designing = trust settings; printing a member's certificate = member screens
-  if (is(/^\/certificate-templates\/active$/)) return { any: [["members", "view"], ["payments", "view"], ["agents", "view"]] };
+  if (is(/^\/certificate-templates\/(active|verify-codes)$/)) return { any: [["members", "view"], ["payments", "view"], ["agents", "view"]] };
   if (is(/^\/certificate-templates(\/|$)/)) return { module: "settings", action: read ? "view" : "edit" };
   if (is(/^\/(rasid-generate|all-payment-pdf|certificate-send)$/)) return { any: [["payments", "view"], ["members", "view"], ["agents", "view"]] };
 
   // anything new that is not mapped yet: staff need edit rights on settings (super admin always passes)
-  return { module: "settings", action: read ? "view" : "edit" };
+  return { module: "settings", action: read ? "view" : "edit", fallback: true };
 }
 
 /** Does `access` satisfy the rule returned by apiPermission? */

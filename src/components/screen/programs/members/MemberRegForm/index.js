@@ -1,6 +1,6 @@
 
 import MemberRegFormPdf from '@/components/pdfcom/MemberRegFormPdf';
-import RegFromPdf from '@/components/pdfcom/MemberRegFormPdf/RegFromPdf';
+import RegFromPdf, { BLANK_MEMBER } from '@/components/pdfcom/MemberRegFormPdf/RegFromPdf';
 import { PDFDownloadLink } from '@react-pdf/renderer';
 import { Button, Drawer, Space, Typography } from 'antd'
 import React from 'react'
@@ -9,14 +9,17 @@ import { useSelector } from 'react-redux';
 const MemberRegForm = ({
     open,
     onClose,
-    memberData,         
+    memberData: givenData,
+    blank = false,        // khaali form — print karke haath se bharne ke liye
 }) => {
+    const memberData = blank ? BLANK_MEMBER : givenData;
     const { Title } = Typography;
     const [isLoading, setIsLoading] = React.useState(false);
   const selectedProgram = useSelector((state) => state.data.selectedProgram);
   const agentList=useSelector((state)=>state.data.agentsList)
   const TrustData = useSelector((state) => state.data.trustData);
-    const fileName = memberData ? `${memberData.displayName.replaceAll(" ","_")+"_"+memberData?.registrationNumber || 'Member'}_RegForm.pdf` : 'Certificate.pdf';
+    const fileName = blank ? 'Khaali_Registration_Form.pdf'
+      : memberData ? `${String(memberData.displayName || 'Member').replaceAll(" ","_")}_${memberData?.registrationNumber || ''}_RegForm.pdf` : 'RegForm.pdf';
 
 
     const memberAgent=agentList.find((x)=>x.id===memberData?.agentId)

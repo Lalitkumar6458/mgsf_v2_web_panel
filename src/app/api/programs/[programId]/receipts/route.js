@@ -1,7 +1,9 @@
 import { route, readJson } from "@/lib/http.js";
+import { publicOrigin } from "@/lib/access.js";
 import { getProgramFor } from "@/lib/auth.js";
 import { getTrustProfile } from "@/services/trust.js";
 import { createReceiptJob } from "@/services/receiptJobs.js";
+import { receiptSettingsForPdf } from "@/services/receiptSettings.js";
 
 export const runtime = "nodejs";
 
@@ -27,6 +29,10 @@ export const POST = route(async ({ request, auth, params }) => {
     receiptPrefix: typeof b.receiptPrefix === "string" ? b.receiptPrefix.slice(0, 12) : "",
     label: typeof b.label === "string" ? b.label.slice(0, 120) : undefined,
     agentInfo,
+    settings: await receiptSettingsForPdf(auth.adminId, auth.features),
+    // QR on paid receipts opens <site>/verify/r/<code>
+    verifyBaseUrl: publicOrigin(request),
+    createdBy: auth.accountId,
     programInfo: { id: program?.id, name: program?.name, hiname: program?.hiname || program?.extra?.hiname || program?.name, isMamera: !!(program?.isMamera ?? program?.extra?.isMamera) },
   });
   return { success: true, job };

@@ -22,7 +22,7 @@ await build({
   jsx: "automatic",
   loader: { ".js": "jsx" },
   alias: { "@": path.join(root, "src") },
-  external: ["react", "react-dom", "react/jsx-runtime", "@react-pdf/renderer", "pdfkit"],
+  external: ["react", "react-dom", "react/jsx-runtime", "@react-pdf/renderer", "pdfkit", "qrcode"],
   banner: { js: "import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);" },
   logLevel: "warning",
 });

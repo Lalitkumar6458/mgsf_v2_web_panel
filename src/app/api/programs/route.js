@@ -21,7 +21,7 @@ export const GET = route(async ({ auth }) => {
     GROUP BY p.id
     ORDER BY p.created_at DESC`);
   // displayMembers = the count as the trust chose to show it (Yojna → Member count kaise dikhe)
-  return { programs: camel(rows).map((p) => ({ ...p, displayMembers: displayCount(p.totalMembers, p.extra?.countDisplay) })) };
+  return { programs: camel(rows).map((p) => ({ ...p, displayMembers: displayCount(p.totalMembers, auth.features?.countDisplay === false ? null : p.extra?.countDisplay) })) };
 });
 
 export const POST = route(async ({ request, auth }) => {

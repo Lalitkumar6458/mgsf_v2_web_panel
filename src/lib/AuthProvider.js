@@ -5,6 +5,7 @@ import { createContext, useCallback, useContext, useEffect, useState } from "rea
 import { message } from "antd";
 import { api } from "./client/api";
 import { can as canDo } from "./permissions";
+import { hasFeature } from "./features";
 
 const AuthContext = createContext();
 
@@ -70,6 +71,12 @@ export function useAuth() {
 }
 
 /** can("members", "add") → true / false for the logged-in trust user (super admin: always true) */
+/** Feature lock of the trust (secret /feature-control page): useFeature()("theme") → true / false */
+export function useFeature() {
+  const { user } = useContext(AuthContext) || {};
+  return useCallback((key) => hasFeature(user?.access, key), [user?.access]);
+}
+
 export function useCan() {
   const { user } = useContext(AuthContext) || {};
   return useCallback((module, action = "view") => canDo(user?.access, module, action), [user?.access]);

@@ -9,7 +9,7 @@ import { normalizeTrust, pickTrustInput, TRUST_IMAGE_FIELDS } from "../lib/trust
 
 const imageCache = new Map(); // url → data URI (uploads are immutable: new upload = new URL)
 
-async function toDataUri(src) {
+export async function toDataUri(src) {
   if (!src || typeof src !== "string" || src.startsWith("data:")) return src;
   if (imageCache.has(src)) return imageCache.get(src);
   let out = null;

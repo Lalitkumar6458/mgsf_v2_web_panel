@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSelector } from 'react-redux';
-import { useAuth } from '@/lib/AuthProvider';
+import { useAuth, useFeature } from '@/lib/AuthProvider';
 import { fetchAllTransactions } from '@/lib/services/firebaseService';
 import { api } from '@/lib/client/api';
 import {
@@ -85,6 +85,7 @@ function exportToCSV(transactions, programName) {
 const TransactionsPage = () => {
   useAmountsHidden(); // re-render on show / hide amounts
   const { user } = useAuth();
+  const feature = useFeature();
   const { message: antdMessage, modal } = App.useApp();
   const selectedProgram = useSelector((state) => state.data.selectedProgram);
   const programRef = useRef(selectedProgram);
@@ -556,21 +557,21 @@ const TransactionsPage = () => {
 
           {/* Exports — right aligned */}
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
-            <Button
+            {feature('exports') && <Button
               size="small"
               icon={<FileExcelOutlined style={{ color: '#16a34a' }} />}
               onClick={onExportCSV}
               disabled={!transactions.length}
             >
               CSV
-            </Button>
-            <Button
+            </Button>}
+            {feature('paymentPdf') && <Button
               size="small" type="primary" danger icon={<FilePdfOutlined />}
               onClick={makePdf}
               disabled={!transactions.length}
             >
               PDF
-            </Button>
+            </Button>}
           </div>
         </div>
 

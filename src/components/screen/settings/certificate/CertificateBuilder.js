@@ -18,6 +18,8 @@ import { BsStarFill } from 'react-icons/bs';
 import BuilderCanvas from './BuilderCanvas';
 import ElementInspector from './ElementInspector';
 import { api } from '@/lib/client/api';
+import { sampleVerifyQr } from '@/lib/client/verifyQr';
+import { useFeature } from '@/lib/AuthProvider';
 import {
   DEFAULT_TEMPLATE, DEFAULT_ELEMENTS, SAMPLE_MEMBER, SAMPLE_PROGRAM,
   cloneTemplate, normalizeTemplate, makeElement, newId, fieldLabel, stripUndefined, SAMPLE_TRUST,
@@ -76,13 +78,13 @@ const tplApi = {
 };
 
 /** Rendered in the browser by the same component that prints the real certificate. */
-async function previewPdf(tpl, program, trust) {
+async function previewPdf(tpl, program, trust, member = SAMPLE_MEMBER) {
   const [{ pdf }, { default: TemplateCertificatePdf }] = await Promise.all([
     import('@react-pdf/renderer'),
     import('@/components/pdfcom/Certificates/TemplateCertificatePdf'),
   ]);
   return pdf(
-    <TemplateCertificatePdf template={tpl} members={[SAMPLE_MEMBER]} program={{ ...SAMPLE_PROGRAM, ...(program || {}) }} trust={trust} />,
+    <TemplateCertificatePdf template={tpl} members={[member]} program={{ ...SAMPLE_PROGRAM, ...(program || {}) }} trust={trust} />,
   ).toBlob();
 }
 
@@ -200,6 +202,11 @@ export default function CertificateBuilderTab() {
   const [uploading, setUploading] = useState(false);
 
   const [preview, setPreview] = useState({ open: false, url: '', loading: false, error: '' });
+  // sample member with a sample verify QR (for the "Verify QR" element)
+  const [sampleQr, setSampleQr] = useState('');
+  const qrFeature = useFeature()('verifyQr');
+  useEffect(() => { sampleVerifyQr().then(setSampleQr).catch(() => {}); }, []);
+  const sampleMember = useMemo(() => ({ ...SAMPLE_MEMBER, verifyQr: sampleQr }), [sampleQr]);
 
   const realTrust = useSelector((st) => st.data.trustData);
   const sampleTrust = useMemo(() => previewTrust(realTrust), [realTrust]);
@@ -566,7 +573,7 @@ export default function CertificateBuilderTab() {
       return { open: true, url: '', loading: true, error: '' };
     });
     try {
-      const blob = await previewPdf(toPayload(tpl), programs.find((p) => p.id === tpl.programId), sampleTrust);
+      const blob = await previewPdf(toPayload(tpl), programs.find((p) => p.id === tpl.programId), sampleTrust, sampleMember);
       setPreview({ open: true, url: URL.createObjectURL(blob), loading: false, error: '' });
     } catch (e) {
       setPreview({ open: true, url: '', loading: false, error: e.message });
@@ -641,6 +648,7 @@ export default function CertificateBuilderTab() {
       { key: 'picture', icon: <FiUpload />, label: 'इमेज अपलोड (मुहर / हस्ताक्षर / लोगो)' },
       { key: 'trustLogo', icon: <FiImage />, label: 'ट्रस्ट लोगो (Settings से)' },
       { key: 'trustStamp', icon: <FiImage />, label: 'ट्रस्ट मुहर (Settings से)' },
+      ...(qrFeature ? [{ key: 'verifyQr', icon: <FiGrid />, label: 'जाँच QR (scan → asli certificate)' }] : []),
       { type: 'divider' },
       { key: 'line', icon: <FiSquare />, label: 'लाइन (हस्ताक्षर के लिए)' },
       { key: 'frame', icon: <FiGrid />, label: 'पेज बॉर्डर' },
@@ -802,7 +810,7 @@ export default function CertificateBuilderTab() {
             tpl={tpl}
             frameSrc={tpl.frameImg}
             displayW={displayW}
-            sampleData={SAMPLE_MEMBER}
+            sampleData={sampleMember}
             sampleProgram={SAMPLE_PROGRAM}
             sampleTrust={sampleTrust}
             selectedIds={selectedIds}
@@ -911,7 +919,7 @@ export default function CertificateBuilderTab() {
             return (
               <div key={g.key} style={{ border: '1px solid #e7e5e4', borderRadius: 12, overflow: 'hidden', background: '#fff', display: 'flex', flexDirection: 'column' }}>
                 <div style={{ padding: 12, background: '#f5f5f4', pointerEvents: 'none' }}>
-                  <BuilderCanvas tpl={t} frameSrc="" displayW={316} sampleData={SAMPLE_MEMBER} sampleProgram={SAMPLE_PROGRAM}
+                  <BuilderCanvas tpl={t} frameSrc="" displayW={316} sampleData={sampleMember} sampleProgram={SAMPLE_PROGRAM}
                     sampleTrust={sampleTrust} selectedId={null} onSelect={() => {}} onPatch={() => {}} showOutlines={false} />
                 </div>
                 <div style={{ padding: '10px 12px 12px', display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>

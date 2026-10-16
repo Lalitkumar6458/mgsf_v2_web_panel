@@ -1,5 +1,6 @@
 'use client'
 import { Button, Card, Descriptions, Modal, Typography, Tabs, Table, Tooltip, App, Tag, Space, Divider, Badge, Drawer } from 'antd'
+import MaskedAadhaar from '@/components/common/MaskedAadhaar';
 import React, { useState, useEffect } from 'react'
 import { EyeOutlined, DeleteOutlined, DollarOutlined, CalendarOutlined, IdcardOutlined, UserOutlined, PhoneOutlined, TagOutlined } from '@ant-design/icons';
 import moment from 'moment';
@@ -305,8 +306,8 @@ function MemberDetailsView({isModalVisible, handleCloseModal, showDeleteConfirm,
                     <Descriptions.Item label="Gotra">{selectedMember.gotra || '-'}</Descriptions.Item>
                     <Descriptions.Item label="Phone">{selectedMember.phone}</Descriptions.Item>
                     <Descriptions.Item label="Alternative Phone">{selectedMember.phoneAlt || '-'}</Descriptions.Item>
-                    <Descriptions.Item label="Aadhaar Number">{selectedMember.aadhaarNo || '-'}</Descriptions.Item>
-                    <Descriptions.Item label={`${guardianLabel} Aadhaar`}>{selectedMember.guardianAadharNo || '-'}</Descriptions.Item>
+                    <Descriptions.Item label="Aadhaar Number"><MaskedAadhaar value={selectedMember.aadhaarNo} /></Descriptions.Item>
+                    <Descriptions.Item label={`${guardianLabel} Aadhaar`}><MaskedAadhaar value={selectedMember.guardianAadharNo} /></Descriptions.Item>
                     <Descriptions.Item label="Password">{selectedMember.password || '-'}</Descriptions.Item>
                   </Descriptions>
                 </div>

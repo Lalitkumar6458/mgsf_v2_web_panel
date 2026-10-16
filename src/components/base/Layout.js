@@ -150,16 +150,35 @@ const LoadingScreen = () => (
   </>
 );
 
+// Plan about to end (developer's /feature-control page) — shown on every screen, can be hidden for the day
+function PlanBanner({ plan }) {
+  const key = `mgsf.planBanner.${plan.expiresAt}.${new Date().toDateString()}`;
+  const [hidden, setHidden] = useState(() => { try { return localStorage.getItem(key) === "1"; } catch { return false; } });
+  if (hidden) return null;
+  const d = plan.daysLeft;
+  const when = d === 0 ? "aaj" : d === 1 ? "kal" : `${d} din mein`;
+  const date = new Date(plan.expiresAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  return (
+    <div className="mb-3 flex items-center gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-900">
+      <span className="font-bold">!</span>
+      <span className="flex-1">Panel ka plan <b>{when}</b> ({date}) khatam ho raha hai. Uske baad panel band ho jayega — samay rehte support se renew karwa lein.</span>
+      <button type="button" className="text-amber-700 hover:text-amber-900 font-semibold" onClick={() => { try { localStorage.setItem(key, "1"); } catch {} setHidden(true); }}>Theek hai</button>
+    </div>
+  );
+}
+
 // ─── Main Layout ─────────────────────────────────────────────────────────────
-function NoAccess({ roleName, goTo }) {
+function NoAccess({ roleName, goTo, switchedOff }) {
   const router = useRouter();
   useEffect(() => { if (goTo) router.replace(goTo); }, [goTo, router]);
   if (goTo) return null;
   return (
     <div className="flex flex-col items-center justify-center text-center py-24 px-6">
       <div className="w-14 h-14 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center text-2xl font-bold mb-4">!</div>
-      <h2 className="text-xl font-semibold text-gray-900">Is screen ki permission nahi hai</h2>
-      <p className="text-gray-500 mt-1 max-w-md">Aapke role{roleName ? ` (${roleName})` : ""} mein ye screen allowed nahi hai. Super Admin se Master Data → Roles mein permission maangiye.</p>
+      <h2 className="text-xl font-semibold text-gray-900">{switchedOff ? "Ye screen chalu nahi hai" : "Is screen ki permission nahi hai"}</h2>
+      <p className="text-gray-500 mt-1 max-w-md">{switchedOff
+        ? "Ye feature aapke panel mein abhi band hai. Chalu karwane ke liye support se sampark karein."
+        : <>Aapke role{roleName ? ` (${roleName})` : ""} mein ye screen allowed nahi hai. Super Admin se Master Data → Roles mein permission maangiye.</>}</p>
     </div>
   );
 }
@@ -177,7 +196,9 @@ export default function CustomDashboardLayout({ children }) {
   const agentStatusChanged = useSelector((state) => state.data.getAgentDataChange);
   const memberStatusChanged = useSelector((state) => state.data.getMemberDataChange);
 
-  const withoutLayout = ["/auth/login"];
+  const withoutLayout = ["/auth/login", "/feature-control"];
+  // public pages (no login, no panel around them): QR verify for receipts / certificates
+  const bare = withoutLayout.includes(pathname) || pathname.startsWith("/verify/");
 
   const selectedProgramNow = useSelector((state) => state.data.selectedProgram);
 
@@ -241,7 +262,7 @@ export default function CustomDashboardLayout({ children }) {
   };
 
   useEffect(() => {
-    if (!loading && !user && !withoutLayout.includes(pathname)) {
+    if (!loading && !user && !bare) {
       router.replace("/auth/login");
     }
     if (user) {
@@ -291,8 +312,8 @@ export default function CustomDashboardLayout({ children }) {
   // Close mobile sidebar on route change
   useEffect(() => { setMobileSidebarOpen(false); }, [pathname]);
 
+  if (bare) return children;
   if (loading) return <LoadingScreen />;
-  if (withoutLayout.includes(pathname)) return children;
   if (!user) return null;
 
   // role-wise screen access (super admin: everything)
@@ -469,8 +490,9 @@ export default function CustomDashboardLayout({ children }) {
             }}
           />
           <main className="page-content">
+            {user.access?.plan && <PlanBanner plan={user.access.plan} />}
             <div className="page-card">
-              {pageAllowed ? children : <NoAccess roleName={user.access?.roleName} goTo={firstAllowed} />}
+              {pageAllowed ? children : <NoAccess roleName={user.access?.roleName} goTo={firstAllowed} switchedOff={!!pageMod && !!user.access?.off?.includes(pageMod)} />}
             </div>
           </main>
         </div>

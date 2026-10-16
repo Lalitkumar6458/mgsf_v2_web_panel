@@ -181,6 +181,21 @@ bash /opt/mgsf_v2/scripts/restore.sh --test <file>           # backup sach mein 
 
 ---
 
+## 11. Secret feature control (sirf developer)
+
+Har trust ke panel mein kaun-kaun se feature chalu hon — ye ek chhupe page `/feature-control` se tay hota hai (kisi menu mein link nahi). Isse:
+- poori screen band kar sakte hain (Reports, Commission, Staff users …) — trust ka Super Admin bhi nahi dekh payega,
+- feature band (Certificate builder, Theme, Rasid PDF, Payment PDF, Export, E-mail, Member count display),
+- agent / member login band, ya **poora panel band** apne message ke saath (jaise fees baki).
+
+Chalu karne ke liye server ki `.env` mein ek lambi secret key (12+ akshar) daalein aur app restart karein:
+```bash
+node -e "console.log(require('crypto').randomBytes(18).toString('base64url'))"   # ek random key banegi — copy karein
+nano /opt/mgsf_v2/.env                                                            # aakhir mein likhein:  CONTROL_KEY=<wo key>
+systemctl restart mgsf
+```
+Key kahin safe likh lein. Phir `https://<aapka-domain>/feature-control` kholein → key daalein. `CONTROL_KEY` khaali ho to page 404 dikhata hai. 5 galat key = 15 minute lock. Key badalne se sab purane control sessions khatam.
+
 ## Update kaise karein (har baar)
 
 PC par code badla → `git add . && git commit -m "..." && git push`. Phir:

@@ -7,6 +7,8 @@ import { eq } from "drizzle-orm";
 import { db, schema } from "../db/index.js";
 import { unauthorized, forbidden, notFound } from "./errors.js";
 import { FULL_ACCESS, normalizePermissions } from "./permissions.js";
+import { disabledModules, DEFAULT_BLOCK_MESSAGE, planState, EXPIRED_MESSAGE } from "./features.js";
+import { getTrustFeatures } from "../services/features.js";
 
 export const COOKIE_NAME = "mgsf_token";
 const TOKEN_DAYS = 30;
@@ -78,6 +80,10 @@ export async function getAuth(request) {
     db.update(schema.sessions).set({ lastSeenAt: new Date() }).where(eq(schema.sessions.id, session.id)).catch(() => {});
   }
   const a = session.account;
+  // feature lock of the trust (secret /feature-control page) — owner is never limited
+  const features = a.role !== "owner" && a.adminId ? await getTrustFeatures(a.adminId) : null;
+  const block = loginBlock(a, features);
+  if (block) throw unauthorized(block);
   // trust staff: super admin (no role) or a custom role's permissions
   let access = a.role === "owner" ? { isSuper: true, permissions: FULL_ACCESS, roleName: "Owner" } : null;
   if (a.role === "admin") {
@@ -86,6 +92,11 @@ export async function getAuth(request) {
       const r = await db.query.roles.findFirst({ where: eq(schema.roles.id, a.roleId) });
       access = { isSuper: false, permissions: normalizePermissions(r?.permissions), roleName: r?.name || "No role", roleId: a.roleId };
     }
+    // screens the developer switched off: closed for this trust's super admin too
+    access.off = disabledModules(features);
+    access.features = features.flags;
+    const plan = planState(features);
+    if (plan.warn) access.plan = { expiresAt: plan.expiresAt, daysLeft: plan.daysLeft }; // banner in the panel
   }
   return {
     access,
@@ -96,7 +107,21 @@ export async function getAuth(request) {
     agentId: a.agentId,
     memberId: a.memberId,
     displayName: a.displayName,
+    features: features?.flags || null,
   };
+}
+
+/**
+ * Feature lock at login: whole panel closed, or agent / member logins switched off.
+ * Returns the message to show, or null. Used by getAuth() and the login route.
+ */
+export function loginBlock(account, features) {
+  if (!features || account.role === "owner") return null;
+  if (!features.active) return features.message || DEFAULT_BLOCK_MESSAGE;
+  if (planState(features).expired) return features.message || EXPIRED_MESSAGE;
+  if (account.role === "agent" && features.flags.agentLogin === false) return "Agent login abhi band hai — trust se sampark karein.";
+  if (account.role === "member" && features.flags.memberLogin === false) return "Member login abhi band hai — trust se sampark karein.";
+  return null;
 }
 
 export function requireRole(auth, ...roles) {

@@ -7,6 +7,9 @@ import TemplateCertificatePdf from "@/components/pdfcom/Certificates/TemplateCer
 import { getActiveTemplate } from "@/services/certificateTemplates.js";
 import { resolveCertificateImages } from "@/lib/certificateImages.js";
 import { renderToBuffer } from "@react-pdf/renderer";
+import QRCode from "qrcode";
+import { publicOrigin } from "@/lib/access.js";
+import { certificateCode } from "@/services/verify.js";
 
 export const runtime = "nodejs";
 
@@ -37,7 +40,14 @@ export async function POST(req) {
 
     let buffer;
     if (template && (template.frameImg || template.elements?.length)) {
-      const ready = await resolveCertificateImages(template, [memberData]);
+      const list = Array.isArray(memberData) ? memberData : [memberData];
+      // "Verify QR" element: each member's signed verify link as a QR image
+      const withQr = auth.features?.verifyQr !== false && template.elements?.some((e) => e.fieldKey === "verifyQr" && !e.hidden)
+        ? await Promise.all(list.map(async (m) => (m?.id
+          ? { ...m, verifyQr: await QRCode.toDataURL(`${publicOrigin(req)}/verify/c/${encodeURIComponent(certificateCode(m.id))}`, { errorCorrectionLevel: "M", margin: 1, width: 300 }) }
+          : m)))
+        : list;
+      const ready = await resolveCertificateImages(template, withQr);
       buffer = await renderToBuffer(
         <TemplateCertificatePdf template={ready.template} members={ready.members} program={selectedProgram} trust={await getTrustProfile(auth.adminId)}
           title={`${memberData?.displayName || ""} — सदस्यता प्रमाण पत्र`} />

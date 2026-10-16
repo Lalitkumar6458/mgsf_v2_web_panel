@@ -1,5 +1,7 @@
 import CertificateViewer, { CertificateDocument } from '@/components/pdfcom/Certificates';
 import { useCertificateTemplate } from '@/lib/client/useCertificateTemplate';
+import { attachVerifyQr, usesVerifyQr } from '@/lib/client/verifyQr';
+import { useFeature } from '@/lib/AuthProvider';
 import { PDFDownloadLink } from '@react-pdf/renderer';
 import { Button, Drawer, Space, Spin, Typography } from 'antd'
 import React from 'react'
@@ -20,7 +22,18 @@ const MemberCertificateCom = ({
     const memberAgent=agentList.find((x)=>x.id===memberData?.agentId)
     // the trust's Certificate Builder design for this yojna (null → built-in certificate)
     const { loading: tplLoading, template } = useCertificateTemplate(selectedProgram?.id, open);
-    const certData = { ...memberData, agentName: memberData?.agentName || memberAgent?.displayName, agentPhone: memberAgent?.phone };
+    const baseData = { ...memberData, agentName: memberData?.agentName || memberAgent?.displayName, agentPhone: memberAgent?.phone };
+    // design with a "Verify QR" element → fetch this member's signed verify link and draw the QR
+    const [qrData, setQrData] = React.useState(null);
+    const qrOn = useFeature()('verifyQr');
+    React.useEffect(() => {
+      setQrData(null);
+      if (!open || !memberData?.id || !qrOn || !usesVerifyQr(template)) return;
+      let alive = true;
+      attachVerifyQr([{ id: memberData.id }], template).then(([m]) => { if (alive) setQrData(m?.verifyQr || null); }).catch(() => {});
+      return () => { alive = false; };
+    }, [open, memberData?.id, template, qrOn]);
+    const certData = qrData ? { ...baseData, verifyQr: qrData } : baseData;
   return (
     <div>
         <Drawer

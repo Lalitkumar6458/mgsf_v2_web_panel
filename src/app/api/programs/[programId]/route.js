@@ -10,7 +10,7 @@ import { conflict } from "@/lib/errors.js";
 export const GET = route(async ({ auth, params }) => {
   const program = await getProgramFor(auth, params.programId);
   const totalMembers = await membersOnBooks(program.id);
-  return { program: { ...program, totalMembers, displayMembers: displayCount(totalMembers, program.extra?.countDisplay) } };
+  return { program: { ...program, totalMembers, displayMembers: displayCount(totalMembers, auth.features?.countDisplay === false ? null : program.extra?.countDisplay) } };
 });
 
 export const PATCH = route(async ({ request, auth, params }) => {

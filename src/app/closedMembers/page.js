@@ -15,7 +15,7 @@ import {
 } from "react-icons/fi";
 import dayjs from "dayjs";
 import { api } from "@/lib/client/api";
-import { useAuth } from "@/lib/AuthProvider";
+import { useAuth, useFeature } from "@/lib/AuthProvider";
 import { fetchAllMembers } from "@/lib/services/firebaseService";
 import ClosingPendingPayment from "@/components/screen/home/ClosingMember/ClosingPendingPayment";
 import EditPdfDataForm from "@/components/screen/home/ClosingMember/EditPdfDataForm";
@@ -68,6 +68,7 @@ export default function ClosedMembersPage() {
   useAmountsHidden(); // re-render on show / hide amounts
   const { message } = App.useApp();
   const { user } = useAuth();
+  const feature = useFeature();
   const program = useSelector((s) => s.data.selectedProgram);
   const agentsList = useSelector((s) => s.data.agentsList) || [];
   const groups = useSelector((s) => s.data.closingGroupList) || [];
@@ -273,7 +274,7 @@ export default function ClosedMembersPage() {
           <p className="cm-sub">Closings recorded in {program?.name || "—"} and how much of each has been collected</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button icon={<FiFileText />} onClick={() => show("receipts")}>Receipts (रसीद)</Button>
+          {feature("receipts") && <Button icon={<FiFileText />} onClick={() => show("receipts")}>Receipts (रसीद)</Button>}
           <Button icon={<FiList />} onClick={() => show("all")} disabled={!filteredLegacy.length}>All members payment status</Button>
           <Button icon={<FiDownload />} onClick={exportCsv} disabled={!filtered.length}>CSV</Button>
           <Button type="primary" icon={<FiFileText />} onClick={() => show("pdf")} disabled={!filtered.length}>Download PDF</Button>

@@ -2,6 +2,7 @@
 // Members page: status tabs with live counts, inline filters (+ more filters), column chooser,
 // row selection with bulk actions, PDF (real file) / CSV / print export of exactly what is shown.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import MaskedAadhaar from '@/components/common/MaskedAadhaar';
 import dynamic from 'next/dynamic';
 import { AgGridReact } from 'ag-grid-react';
 import {
@@ -25,7 +26,7 @@ import { GrCertificate } from 'react-icons/gr';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchAllMembers } from '@/lib/services/firebaseService';
 import { api } from '@/lib/client/api';
-import { useAuth, useCan } from '@/lib/AuthProvider';
+import { useAuth, useCan, useFeature } from '@/lib/AuthProvider';
 import { BsThreeDots } from 'react-icons/bs';
 import MemberDetailsView from '../MemberDetailsView';
 import EditMember from '../EditMember';
@@ -122,6 +123,7 @@ const MemberList = () => {
     const [isEditmemberOpen,     setIsEditmemberOpen]     = useState(false);
     const [isCertModalOpen,      setIsCertModalOpen]      = useState(false);
     const [isOpenRegModal,       setIsOpenRegModal]       = useState(false);
+    const [blankFormOpen,        setBlankFormOpen]        = useState(false);
     const [isOpenClosingForm,    setIsOpenClosingForm]    = useState(false);
     const [isPaymentDetailsOpen, setIsPaymentDetailsOpen] = useState(false);
     const [paymentReport,        setPaymentReport]        = useState(null);
@@ -145,6 +147,7 @@ const MemberList = () => {
     const TrustData          = useSelector(s => s.data.trustData);
     const { user }           = useAuth();
     const can                = useCan();
+    const feature            = useFeature();
     const { modal }          = App.useApp();
     const gridRef            = useRef();
     const amountsAreHidden   = useAmountsHidden();
@@ -462,7 +465,7 @@ const MemberList = () => {
         const isRequest = data._bucket === 'pending' || data._bucket === 'rejected';
         const items = [
             !(isDeleted || isBlocked || isClosed || isRequest) && can('closings', 'add') && { key: 'close', icon: <PlusCircleOutlined />, label: 'Close form (closing)', onClick: () => { setSelectedMember(data); setIsOpenClosingForm(true); } },
-            !isDeleted && { key: 'cert', icon: <GrCertificate />, label: 'Certificate', onClick: () => { setSelectedMember(data); setIsCertModalOpen(true); } },
+            !isDeleted && feature('certificates') && { key: 'cert', icon: <GrCertificate />, label: 'Certificate', onClick: () => { setSelectedMember(data); setIsCertModalOpen(true); } },
             !(isDeleted || isRequest) && { key: 'pay', icon: <MdOutlinePendingActions />, label: 'Payment details', onClick: () => handleShowPaymentDetails(data) },
             !(isDeleted || isRequest) && can('reports') && { key: 'history', icon: <FaFile />, label: 'Payment history report (late / time par)', onClick: () => { window.location.href = `/reports?member=${data.id}`; } },
             !isDeleted && { key: 'reg', icon: <FaFile />, label: 'Registration form', onClick: () => { setSelectedMember(data); setIsOpenRegModal(true); } },
@@ -540,7 +543,7 @@ const MemberList = () => {
                 : <span className="text-gray-300">—</span>,
         },
         { field: '_bucket', headerName: 'Status', minWidth: 110, hide: hidden('_bucket'), cellRenderer: ({ value }) => <StatusPill b={value} /> },
-        { field: 'aadhaarNo', headerName: 'Aadhaar', minWidth: 130, hide: hidden('aadhaarNo') },
+        { field: 'aadhaarNo', headerName: 'Aadhaar', minWidth: 150, hide: hidden('aadhaarNo'), cellRenderer: ({ value }) => <MaskedAadhaar value={value} empty="" /> },
         { colId: 'actions', headerName: '', pinned: 'right', width: 118, minWidth: 118, maxWidth: 118, sortable: false, filter: false, resizable: false,
           cellRenderer: ({ data }) => rowActions(data) },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -592,13 +595,16 @@ const MemberList = () => {
                 </div>
                 <div className="flex flex-wrap gap-2">
                     <Button icon={<FiCreditCard />} onClick={() => setJoinFeesMemberListOpen(true)}>Join fees list</Button>
-                    <Button icon={<FiAward />} loading={isCertDownloading} disabled={!exportRows.length}
+                    {feature('blankForm') && <Tooltip title="Khaali registration form — print karke gaon mein haath se bharwayein">
+                        <Button icon={<FiPrinter />} onClick={() => setBlankFormOpen(true)}>Khaali form</Button>
+                    </Tooltip>}
+                    {feature('certificates') && <Button icon={<FiAward />} loading={isCertDownloading} disabled={!exportRows.length}
                         onClick={() => downloadMultipleCertificates(exportRows, selectedProgram)}>
                         Certificates{selectedRows.length ? ` (${selectedRows.length})` : ''}
-                    </Button>
-                    <Dropdown menu={exportMenu} trigger={['click']} disabled={!exportRows.length}>
+                    </Button>}
+                    {feature('exports') && <Dropdown menu={exportMenu} trigger={['click']} disabled={!exportRows.length}>
                         <Button type="primary" icon={<FiDownload />}>Export {selectedRows.length ? `${selectedRows.length} selected` : ''} <FiChevronDown /></Button>
-                    </Dropdown>
+                    </Dropdown>}
                 </div>
             </div>
 
@@ -721,7 +727,7 @@ const MemberList = () => {
                     <div className="flex-1" />
                     <Button size="small" icon={<FiFileText />} onClick={() => setIsPdfOpen(true)}>PDF</Button>
                     <Button size="small" icon={<FiDownload />} onClick={exportCsv}>CSV</Button>
-                    <Button size="small" icon={<FiAward />} loading={isCertDownloading} onClick={() => downloadMultipleCertificates(selectedRows, selectedProgram)}>Certificates</Button>
+                    {feature('certificates') && <Button size="small" icon={<FiAward />} loading={isCertDownloading} onClick={() => downloadMultipleCertificates(selectedRows, selectedProgram)}>Certificates</Button>}
                     <Button size="small" type="text" icon={<FiX />} onClick={() => gridRef.current?.api?.deselectAll()}>Clear</Button>
                 </div>
             ) : (
@@ -800,6 +806,7 @@ const MemberList = () => {
                 onClose={() => setIsCertModalOpen(false)}
                 memberData={selectedMember}
             />
+            {blankFormOpen && <MemberRegForm open={blankFormOpen} blank onClose={() => setBlankFormOpen(false)} />}
             <MemberRegForm
                 open={isOpenRegModal}
                 onClose={() => setIsOpenRegModal(false)}

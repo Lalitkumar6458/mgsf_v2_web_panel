@@ -64,6 +64,13 @@
       "when": 1792500000000,
       "tag": "0008_certificate_bg",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792600000000,
+      "tag": "0009_audit_cash_receipts",
+      "breakpoints": true
     }
   ]
 }

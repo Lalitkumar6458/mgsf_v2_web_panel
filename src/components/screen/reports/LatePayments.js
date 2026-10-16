@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
 import { App, Button, DatePicker, Dropdown, Input, InputNumber, Segmented, Select, Table, Tag, Tooltip } from "antd";
-import { FiDownload, FiFileText, FiRefreshCw, FiSearch } from "react-icons/fi";
+import { FiDownload, FiFileText, FiRefreshCw, FiSearch, FiMessageCircle } from "react-icons/fi";
+import { waUrl, reminderText, useTrustUpi } from "@/lib/client/whatsapp";
+import { useFeature } from "@/lib/AuthProvider";
 import { api } from "@/lib/client/api";
 import { KIND, rs, rsPdf, d, downloadCsv, Tile, PDF_ROW_LIMIT } from "./shared";
 import { useAmountsHidden } from "@/lib/client/privacy";
@@ -28,6 +30,8 @@ export default function LatePayments({ program, onOpenMember, initialAgentId }) 
   const [data, setData] = useState({ rows: [], total: 0, summary: {} });
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
+  const upiId = useTrustUpi();
+  const waOn = useFeature()("whatsapp");
 
   const filters = useMemo(() => ({
     kind, agentId, closingGroupId: groupId, minDays: minDays || undefined, q: q.trim() || undefined, sort,
@@ -120,6 +124,18 @@ export default function LatePayments({ program, onOpenMember, initialAgentId }) 
     {
       title: "Days late", dataIndex: "daysLate", align: "right", width: 95,
       render: (v, r) => (v ? <b className={r.kind === "overdue" ? "text-red-600" : "text-amber-600"}>{v}</b> : <span className="text-gray-300">0</span>),
+    },
+    {
+      title: "", key: "wa", width: 52, align: "center",
+      render: (_, r) => {
+        if (!waOn || (r.kind !== "overdue" && r.kind !== "not_due")) return null;
+        const url = waUrl(r.payerPhone, reminderText({
+          name: r.payerName, trustName: trust?.name, programName: program?.hiname || program?.name, count: 1,
+          amount: (r.amount || 0) - (r.paidAmount || 0), lastDate: r.dueDate ? d(r.dueDate) : "", upiId,
+          closings: [`${r.closingName}${r.closingDate ? ` (${d(r.closingDate)})` : ""}`],
+        }));
+        return url ? <Tooltip title="WhatsApp pe yaad dilayein"><Button size="small" type="text" icon={<FiMessageCircle className="text-green-600" />} href={url} target="_blank" /></Tooltip> : null;
+      },
     },
   ];
 

@@ -36,7 +36,7 @@ export async function resolveCertificateImages(template, members) {
   const out = [];
   for (const m of members) {
     const copy = { ...m };
-    for (const k of imageKeys) if (!k.includes(".") && copy[k]) copy[k] = await loadImage(copy[k]);
+    for (const k of imageKeys) if (!k.includes(".") && copy[k] && !String(copy[k]).startsWith("data:")) copy[k] = await loadImage(copy[k]);
     out.push(copy);
   }
   return { template: { ...template, frameImg, elements }, members: out };
