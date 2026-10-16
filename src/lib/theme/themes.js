@@ -147,3 +147,26 @@ export function buildTheme(raw) {
 
 /** CSS text for the variables (used by the no-flash script and the provider). */
 export const varsToCss = (vars) => Object.entries(vars).map(([k, v]) => `${k}:${v}`).join(";");
+
+/**
+ * Colours for the mobile app (agent / member app) from the same trust theme as the panel:
+ * header = the panel's sidebar colour, brand scale for buttons, chips and soft backgrounds.
+ */
+export function appPalette(raw) {
+  const { vars, resolved } = buildTheme(raw);
+  const primary = resolved.primary;
+  const lightHeader = resolved.sidebar === "light";
+  return {
+    preset: resolved.preset,
+    primary,
+    primaryDark: vars["--brand-700"],
+    primaryLight: vars["--brand-400"],
+    soft: vars["--brand-50"],
+    softer: vars["--brand-100"],
+    pageBg: vars["--page-bg"],
+    header: lightHeader ? primary : vars["--sb-bg1"],
+    headerEnd: lightHeader ? vars["--brand-700"] : vars["--sb-bg2"],
+    headerText: "#ffffff",
+    onPrimary: "#ffffff",
+  };
+}
