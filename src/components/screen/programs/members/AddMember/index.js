@@ -2,6 +2,7 @@
 
 import { FiUserPlus } from 'react-icons/fi';
 import DuplicateWarning from '@/components/common/DuplicateWarning';
+import WhatsAppJoinTick from '@/components/common/WhatsAppJoinTick';
 import React, { useState, useEffect } from 'react';
 import { Button, Drawer, Select, Form, Input, DatePicker, Upload, Card, Row, Col, Divider, Space, Typography, App, Spin, Checkbox, Modal, AutoComplete } from 'antd';
 import {
@@ -724,6 +725,7 @@ const checkApplicationNumberDuplicate = async (appNumber, programId) => {
         extraDetails: extraFields.filter(f => f.label && f.value),
         note: values.note || '',
         createdAt: new Date(),
+        sendWhatsapp: values.sendWhatsapp === true, // WhatsApp welcome + certificate (default off)
       };
 
       // Save to Firestore
@@ -1737,6 +1739,11 @@ const checkApplicationNumberDuplicate = async (appNumber, programId) => {
                       </Form.Item>
                     </Col>
                   </Row>
+                </Card>
+
+                {/* WhatsApp welcome + certificate (only when Settings → WhatsApp join template is on) */}
+                <Card size="small" style={{ marginTop: 12 }}>
+                  <WhatsAppJoinTick />
                 </Card>
 
                 {/* Hidden field for age group ID */}

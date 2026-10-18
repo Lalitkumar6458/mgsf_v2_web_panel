@@ -369,7 +369,7 @@ saare server ek saath update: `scripts/deploy-all.ps1`.
 Har trust apna Gupshup app jodta hai (**Settings → WhatsApp**). Feature-control switch: `whatsappApi`. Poora setup: [WHATSAPP-GUPSHUP.md](WHATSAPP-GUPSHUP.md).
 
 - 3 automatic message, har ek ka apna **Template ID** + template text. Har `{{n}}` ke liye variable chunte hain (`{name}`, `{regNo}`, `{pendingAmount}`, `{lastDate}`, `{paidAmount}` …).
-  1. member accept → certificate PDF
+  1. member jodte / accept karte waqt "WhatsApp bhejein" tick (default off) → certificate PDF
   2. nayi closing / bulk button → baki rasid PDF
   3. payment → us payment ki jama rasid PDF
 - PDF ka signed public link: `/api/wa/file/<token>/<naam>.pdf` (30 din). Gupshup ise download karta hai.

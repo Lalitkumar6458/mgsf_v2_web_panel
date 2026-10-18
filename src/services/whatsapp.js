@@ -190,13 +190,23 @@ export async function sendEvent(adminId, event, items, { base, settings, force =
 }
 
 /** Member accepted → join message with the certificate (only once per member). */
+/**
+ * Member added / request accepted with "WhatsApp par welcome bhejein" ticked (default off) →
+ * join message + certificate. Only once per member.
+ */
 export async function onJoin(adminId, memberId, base) {
   const s = await active(adminId);
-  if (!s?.events.join.on) return null;
+  if (!s?.events.join.templateId) return null;
   const { rows } = await db.execute(sql`
     SELECT 1 FROM whatsapp_messages WHERE member_id = ${memberId} AND event = 'join' AND direction = 'out' AND status <> 'failed' LIMIT 1`);
   if (rows.length) return { sent: 0, skipped: 1, reason: "already" };
-  return sendEvent(adminId, "join", [{ memberId }], { base, settings: s });
+  return sendEvent(adminId, "join", [{ memberId }], { base, settings: s, force: true });
+}
+
+/** For the add-member / accept forms: show the WhatsApp tick box? */
+export async function joinStatus(adminId) {
+  const s = await active(adminId);
+  return { ready: !!(s?.events.join.on && s.events.join.templateId), media: s?.events.join.media || "none" };
 }
 
 /** Payment saved → paid message to each payer of that batch, with that payment's rasid. */

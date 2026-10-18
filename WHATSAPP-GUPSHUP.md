@@ -4,7 +4,7 @@ Panel har trust ke **apne** Gupshup app / WhatsApp number se 3 message apne aap 
 
 | # | Kab | Saath mein PDF |
 |---|---|---|
-| 1 | Member **accept** hote hi (admin ne joda ya request accept ki) — ek member ko sirf ek baar | सदस्यता प्रमाण पत्र |
+| 1 | Member jodte waqt ya request accept karte waqt **"WhatsApp par welcome bhejein"** tick karne par. Ye tick default mein khaali rehta hai, aur ek member ko message sirf ek baar jaata hai | सदस्यता प्रमाण पत्र |
 | 2 | **Baki payment** — nayi closing darj hote hi (option) ya panel se "sabko ek saath" button | बकाया रसीद |
 | 3 | **Payment jama** hote hi — us payment ki | जमा रसीद |
 

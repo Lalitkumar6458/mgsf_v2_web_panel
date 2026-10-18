@@ -41,7 +41,7 @@ export const WA_VARIABLES = [
 const VAR_KEYS = new Set(WA_VARIABLES.map((v) => v.key));
 
 export const WA_EVENTS = [
-  { key: "join", label: "1. सदस्य जुड़ने पर", desc: "Member accept hote hi — certificate PDF ke saath", media: "certificate" },
+  { key: "join", label: "1. सदस्य जुड़ने पर", desc: "Member jodte / request accept karte waqt \"WhatsApp bhejein\" tick karne par — certificate PDF ke saath (chalu = form mein tick box dikhega)", media: "certificate" },
   { key: "pending", label: "2. बकाया भुगतान", desc: "Nayi closing par (auto) ya panel se bulk reminder — baki rasid PDF ke saath", media: "pendingReceipt" },
   { key: "paid", label: "3. भुगतान जमा", desc: "Payment entry hote hi — us payment ki paid rasid PDF ke saath", media: "paidReceipt" },
 ];

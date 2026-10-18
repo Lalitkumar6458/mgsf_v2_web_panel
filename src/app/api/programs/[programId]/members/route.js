@@ -20,7 +20,8 @@ export const GET = route(async ({ auth, params, query }) => {
 export const POST = route(async ({ request, auth, params }) => {
   const program = await getProgramFor(auth, params.programId);
   if (auth.role === "member") throw forbidden();
-  const r = await createMember(program, await readJson(request), auth);
+  const input = await readJson(request);
+  const r = await createMember(program, input, auth);
 
   const m = r.member;
   const body = `${m.displayName}\nमोबाइल: ${m.phone}\nगाँव: ${m.village}\nयोजना: ${program.name}\nएप्लीकेशन नंबर: ${m.applicationNumber}`;
@@ -30,7 +31,7 @@ export const POST = route(async ({ request, auth, params }) => {
   } else if (m.agentId) {
     notifyAgent(program.adminId, m.agentId, { title: "नया सदस्य जोड़ दिया गया", body, data: { memberId: m.id } }).catch(() => {});
   }
-  // accepted straight away → WhatsApp welcome with the certificate
-  if (r.member?.status === "accepted") later(() => onJoin(program.adminId, m.id, publicOrigin(request)));
+  // accepted straight away + "WhatsApp par bhejein" ticked → welcome with the certificate
+  if (r.member?.status === "accepted" && input.sendWhatsapp === true) later(() => onJoin(program.adminId, m.id, publicOrigin(request)));
   return r;
 });

@@ -11,6 +11,7 @@ import dayjs from 'dayjs';
 import { acceptMemberWithCounterUpdate, checkAadhaarExists, generate6DigitRegNo, sendFirebaseNotification, updateMemberStatus } from '@/lib/helper';
 import { setgetMemberDataChange } from '@/redux/slices/commonSlice';
 import { createMemberAccount, generateMemberPassword } from '@/lib/commonFun';
+import WhatsAppJoinTick from '@/components/common/WhatsAppJoinTick';
 
 const { Search, TextArea } = Input;
 const { Option } = Select;
@@ -199,6 +200,7 @@ const showAcceptModal = (member) => {
         updatedAt: new Date(),
         approvedBy: user?.displayName || user?.email || 'Admin',
         approvedAt: new Date(),
+        sendWhatsapp: values.sendWhatsapp === true, // WhatsApp welcome + certificate (default off)
       };
 
       // Use the transaction function to accept member and update counters
@@ -862,6 +864,7 @@ ${values.joinFeesDone ? `Join Fees: ₹${joinFeesPaidAmount}` : 'Join Fees: Pend
     </Col>
   </Row>
 </Card>
+            <WhatsAppJoinTick />
           </Form>
         </Modal>
 

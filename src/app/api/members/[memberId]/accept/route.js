@@ -10,7 +10,8 @@ import { onJoin } from "@/services/whatsapp.js";
 export const POST = route(async ({ request, auth, params }) => {
   adminOnly(auth);
   const m = await getMemberFor(auth, params.memberId, { forWrite: true });
-  const r = await acceptMember(params.memberId, await readJson(request));
+  const input = await readJson(request);
+  const r = await acceptMember(params.memberId, input);
   if (m.agentId) {
     notifyAgent(m.program.adminId, m.agentId, {
       title: "मेंबर रिक्वेस्ट मंजूर",
@@ -18,6 +19,7 @@ export const POST = route(async ({ request, auth, params }) => {
       data: { memberId: m.id },
     }).catch(() => {});
   }
-  later(() => onJoin(m.program.adminId, params.memberId, publicOrigin(request)));
+  // "WhatsApp par bhejein" ticked in the accept dialog (default off)
+  if (input.sendWhatsapp === true) later(() => onJoin(m.program.adminId, params.memberId, publicOrigin(request)));
   return r;
 });
