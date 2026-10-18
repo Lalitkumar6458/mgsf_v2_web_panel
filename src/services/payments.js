@@ -8,6 +8,14 @@ import { badRequest, conflict, notFound } from "../lib/errors.js";
 import { toDate, todayIST, fmtISO } from "../lib/dates.js";
 import { camel } from "../lib/case.js";
 import { accrueClosingFor, cancelCommissions } from "./commissions.js";
+import { dueStillOwed } from "./closings.js";
+
+/** Rupees are whole numbers (dues / transactions are integers): "120" ok, 100.5 / "abc" refused. */
+function wholeRupees(v, what = "Amount") {
+  const n = Number(v);
+  if (!Number.isFinite(n) || !Number.isInteger(n) || n <= 0) throw badRequest(`${what} poore rupaye mein ho (jaise 200), ${v} nahi chalega`);
+  return n;
+}
 
 const METHODS = new Set(["cash", "online", "upi", "cheque", "bank", "other"]);
 
@@ -98,7 +106,7 @@ export async function paySingle(body, auth) {
     if (!open.length) throw conflict("Selected closings are already paid or not owed by this member");
 
     const outstanding = open.reduce((s, d) => s + (d.amount - d.paid_amount), 0);
-    let remaining = body.customTotalAmount ? Number(body.customTotalAmount) : outstanding;
+    let remaining = body.customTotalAmount ? wholeRupees(body.customTotalAmount) : outstanding;
     if (!(remaining > 0)) throw badRequest("Amount must be greater than 0");
     if (remaining > outstanding) throw badRequest(`Amount ₹${remaining} is more than outstanding ₹${outstanding}`);
 
@@ -125,6 +133,7 @@ export async function payBulk(body, auth) {
   if (!programId || !memberIds.length) throw badRequest("programId and memberIds required");
   const isCustom = memberClosingSelections && Object.keys(memberClosingSelections).length > 0;
   if (!isCustom && !(Number(globalAmount) > 0)) throw badRequest("Either memberClosingSelections or globalAmount required");
+  if (!isCustom) wholeRupees(globalAmount);
   const meta = commonMeta(body);
 
   return db.transaction(async (tx) => {
@@ -190,6 +199,13 @@ export async function reverseTransaction(transactionId, { reason = "" } = {}, au
           paid_date = NULL,
           updated_at = now()
         WHERE id = ${t.due_id}`);
+      // a due kept only because money was in it (member deleted / dates changed / closing deleted) goes once
+      // that money is out — it is not owed by the rule any more
+      const { rows: [d] } = await tx.execute(sql`SELECT paid_amount FROM dues WHERE id = ${t.due_id}`);
+      if (d && d.paid_amount === 0 && !(await dueStillOwed(tx, t.due_id))) {
+        await tx.execute(sql`UPDATE transactions SET due_id = NULL WHERE due_id = ${t.due_id} AND status <> 'completed'`);
+        await tx.execute(sql`DELETE FROM dues WHERE id = ${t.due_id}`);
+      }
     }
     const commission = await cancelCommissions(tx, "closing", sql`c.source_id = ${t.id}`, reason ? `Payment reversed: ${reason}` : "Payment reversed");
     return { success: true, transactionId: t.id, amount: t.amount, commission };

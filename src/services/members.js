@@ -5,7 +5,7 @@ import { badRequest, conflict, notFound } from "../lib/errors.js";
 import { toDate, todayIST, fmtISO } from "../lib/dates.js";
 import { buildRegistrationNumber, defaultMemberPassword } from "../lib/regNumber.js";
 import { hashPassword } from "../lib/auth.js";
-import { syncNewlyAccepted, resyncPayer } from "./closings.js";
+import { syncNewlyAccepted, resyncPayer, lockProgram, programOf } from "./closings.js";
 import { camel } from "../lib/case.js";
 import { recordFormJoinFee } from "./joinFees.js";
 
@@ -126,6 +126,7 @@ export async function createMember(program, body, auth) {
 
   const rest = f;
   return db.transaction(async (tx) => {
+    if (auth.role !== "agent") await lockProgram(tx, program.id); // accepted straight away → dues are made
     const [m] = await tx.insert(members).values({
       ...rest,
       programId: program.id,
@@ -143,6 +144,7 @@ export async function createMember(program, body, auth) {
 /** Accept a request. `patch` may carry fields set in the accept dialog (join fees, closing months, dateJoin …). */
 export async function acceptMember(memberId, patch = {}) {
   return db.transaction(async (tx) => {
+    await lockProgram(tx, await programOf(tx, memberId)); // before the member lock (see closings.js)
     const { rows: [m] } = await tx.execute(sql`SELECT status, deleted, program_id, aadhaar_no FROM members WHERE id = ${memberId} FOR UPDATE`);
     if (!m) throw notFound("Member not found");
     if (m.deleted) throw badRequest("Member is deleted");
@@ -164,6 +166,7 @@ export async function acceptMember(memberId, patch = {}) {
 export async function setMemberStatus(memberId, status, { reason = "" } = {}) {
   if (!["rejected", "removed"].includes(status)) throw badRequest("status must be rejected or removed");
   return db.transaction(async (tx) => {
+    await lockProgram(tx, await programOf(tx, memberId));
     const { rows: [m] } = await tx.execute(sql`SELECT * FROM members WHERE id = ${memberId} FOR UPDATE`);
     if (!m) throw notFound("Member not found");
     if (m.closing_date) throw conflict("Closed member — revert the closing first");
@@ -214,6 +217,7 @@ export async function updateMember(member, body) {
   const payChanged = f.payAmount !== undefined && (Number(f.payAmount) > 0) !== (Number(member.payAmount) > 0);
   let dues = null;
   const [m] = await db.transaction(async (tx) => {
+    if (joinChanged || payChanged) await lockProgram(tx, member.programId);
     const res = await tx.update(members).set(f).where(eq(members.id, member.id)).returning();
     if (joinChanged || payChanged) dues = await resyncPayer(tx, member.id, { strict: !!joinChanged });
     return res;
@@ -229,9 +233,13 @@ export async function updateMember(member, body) {
 
 export async function softDeleteMember(memberId) {
   return db.transaction(async (tx) => {
+    await lockProgram(tx, await programOf(tx, memberId));
     const { rows: [paid] } = await tx.execute(sql`SELECT count(*)::int AS n FROM dues WHERE (payer_member_id = ${memberId} OR closing_member_id = ${memberId}) AND paid_amount > 0`);
     await tx.execute(sql`UPDATE members SET deleted = true, active = false, updated_at = now() WHERE id = ${memberId}`);
-    const r = await tx.execute(sql`DELETE FROM dues WHERE payer_member_id = ${memberId} AND status = 'pending' AND paid_amount = 0`);
+    // his own untouched dues as a payer, and — if he was a closing — nobody owes his (deleted) closing any more
+    const r = await tx.execute(sql`
+      DELETE FROM dues WHERE (payer_member_id = ${memberId} OR closing_member_id = ${memberId})
+        AND status = 'pending' AND paid_amount = 0`);
     await tx.execute(sql`UPDATE accounts SET active = false WHERE member_id = ${memberId}`);
     return { success: true, pendingDuesRemoved: r.rowCount ?? 0, keptPaidDues: paid.n };
   });

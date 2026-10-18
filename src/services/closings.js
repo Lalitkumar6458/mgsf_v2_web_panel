@@ -35,6 +35,38 @@ const eligiblePayers = (programId, closingId, closingDay) => sql`
     AND p.pay_amount > 0
     AND NOT (p.status = 'closed' AND p.closing_date IS NULL)`;
 
+/**
+ * One change to a program's dues at a time (closing record / edit / revert, member accept, join date
+ * or pay amount change, delete). Without this, two of them at the same moment each miss the other's
+ * uncommitted work (e.g. a member accepted while a closing is saved got no due for it).
+ * Always taken BEFORE any member row lock (same order everywhere → no deadlock).
+ */
+export async function lockProgram(tx, programId) {
+  if (programId) await tx.execute(sql`SELECT id FROM programs WHERE id = ${programId} FOR UPDATE`);
+}
+
+/** Program of a member, read without locking (to take the program lock first). */
+export async function programOf(tx, memberId) {
+  const { rows: [r] } = await tx.execute(sql`SELECT program_id FROM members WHERE id = ${memberId}`);
+  if (!r) throw notFound("Member not found");
+  return r.program_id;
+}
+
+/**
+ * Is this due still owed by THE RULE's dates and status? (used after a payment is reversed: a due that
+ * was only kept because money was in it goes away once the money is out). Blocked payers keep theirs.
+ */
+export async function dueStillOwed(tx, dueId) {
+  const { rows: [r] } = await tx.execute(sql`
+    SELECT (NOT p.deleted AND p.status IN ('accepted', 'closed') AND p.pay_amount > 0
+            AND NOT c.deleted AND c.closing_date IS NOT NULL AND p.id <> c.id
+            AND p.date_join <= c.closing_date
+            AND (p.closing_date IS NULL OR p.closing_date >= c.closing_date)) AS owed
+    FROM dues d JOIN members p ON p.id = d.payer_member_id JOIN members c ON c.id = d.closing_member_id
+    WHERE d.id = ${dueId}`);
+  return r ? !!r.owed : false;
+}
+
 async function lockMember(tx, memberId) {
   const { rows } = await tx.execute(sql`SELECT * FROM members WHERE id = ${memberId} FOR UPDATE`);
   if (!rows.length) throw notFound("Member not found");
@@ -66,6 +98,7 @@ export async function recordClosing(memberId, input) {
   if (!closingDay) throw badRequest("Valid closingDate required (DD-MM-YYYY or YYYY-MM-DD)");
 
   return db.transaction(async (tx) => {
+    await lockProgram(tx, await programOf(tx, memberId));
     const m = await lockMember(tx, memberId);
     if (m.deleted) throw badRequest("Member is deleted");
     if (m.closing_date) throw conflict("Member is already closed");
@@ -97,6 +130,7 @@ export async function recordClosing(memberId, input) {
 /** Edit closing details. If the date changes, dues of this closing are re-synced (paid dues are never touched). */
 export async function updateClosing(memberId, input) {
   return db.transaction(async (tx) => {
+    await lockProgram(tx, await programOf(tx, memberId));
     const m = await lockMember(tx, memberId);
     if (!m.closing_date) throw badRequest("Member is not closed");
     const newDay = input.closingDate ? fmtISO(toDate(input.closingDate)) : m.closing_date;
@@ -157,6 +191,7 @@ export async function updateClosing(memberId, input) {
  */
 export async function revertClosing(memberId, { force = false } = {}) {
   return db.transaction(async (tx) => {
+    await lockProgram(tx, await programOf(tx, memberId));
     const m = await lockMember(tx, memberId);
     if (!m.closing_date) throw badRequest("Member is not closed");
 
@@ -298,6 +333,7 @@ export async function payerDuesCheck(memberId) {
 /** Apply corrections chosen by the admin: add dues for closingIds, delete pending dueIds (paid/partial are never deleted). */
 export async function applyPayerCorrection(memberId, { addClosingIds = [], removeDueIds = [] }) {
   return db.transaction(async (tx) => {
+    await lockProgram(tx, await programOf(tx, memberId));
     const p = await lockMember(tx, memberId);
     const days = await dueDays(tx, p.program_id);
     let added = 0, removed = 0;

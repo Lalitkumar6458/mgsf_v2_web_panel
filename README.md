@@ -70,7 +70,12 @@ Closing C (date D) ke liye member P tab dega jab:
 same program, P ≠ C, P deleted/blocked/inactive nahi, status accepted/closed, **P.dateJoin ≤ D**, aur P khud D se pehle ya D ko closed nahi hua.
 
 Ye wahi rule hai jo purane Cloud Function aur "Correct Payments" screen mein tha.
-- Naya member accept hone pe: by default sirf **aaj ya baad ki** closings ka due banta hai (purana behaviour). Program setting `syncPastClosingsOnAccept = true` karne pe join date ke baad ki saari closings ka due banega.
+- Naya member add / accept hone pe: uski **join date ke baad ki saari closings** ka due banta hai (same rule). Join date badlo to dues usi hisaab se jud / hat jaate hain. Jis closing ka paisa jama ho chuka hai aur nayi date se wo banti nahi, wahan badlav mana hota hai.
+- Ek program mein dues badalne wale kaam (closing, accept, join date, pay amount, delete) ek-ek karke chalte hain (program lock). Isse ek saath do kaam hone par koi due chhootta nahi.
+- Payment reverse hone par jo due sirf paise ki wajah se bacha tha (rule ke hisaab se banta nahi), wo hat jaata hai.
+- Rakam sirf poore rupaye mein (₹100.5 mana).
+- Live data check (kuch nahi badalta): `node --env-file=.env scripts/audit-dues.js`. Ye MISSING / EXTRA due, paisa mismatch aur bina due ke transaction dikhata hai.
+- Test: `tests/core-audit.test.js` hazaron random operation chalata hai aur har step ke baad poora hisaab check karta hai: dues = rule, jama = transactions, status sahi.
 
 **Purane bugs jo yahan theek hain:**
 - Closing member ko khud ki closing ka due nahi banta (pehle `{id}_{id}` ban jata tha).
