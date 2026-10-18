@@ -71,6 +71,20 @@
       "when": 1792600000000,
       "tag": "0009_audit_cash_receipts",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792700000000,
+      "tag": "0010_session_device",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1792800000000,
+      "tag": "0011_whatsapp",
+      "breakpoints": true
     }
   ]
 }

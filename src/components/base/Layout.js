@@ -14,6 +14,7 @@ import { FiLayers } from 'react-icons/fi';
 import { loadTrustProfile, onTrustChanged } from '@/lib/client/trust';
 import { normalizeTrust, displayName } from '@/lib/trust/profile';
 import GlobalPdfWidget from './Globalpdfwidget';
+import { PlanWarning } from './PanelPlan';
 
 // ─── Skeleton loader ────────────────────────────────────────────────────────
 const SkeletonRow = ({ w = 'w-full', h = 'h-4', className = '' }) => (
@@ -149,23 +150,6 @@ const LoadingScreen = () => (
     </div>
   </>
 );
-
-// Plan about to end (developer's /feature-control page) — shown on every screen, can be hidden for the day
-function PlanBanner({ plan }) {
-  const key = `mgsf.planBanner.${plan.expiresAt}.${new Date().toDateString()}`;
-  const [hidden, setHidden] = useState(() => { try { return localStorage.getItem(key) === "1"; } catch { return false; } });
-  if (hidden) return null;
-  const d = plan.daysLeft;
-  const when = d === 0 ? "aaj" : d === 1 ? "kal" : `${d} din mein`;
-  const date = new Date(plan.expiresAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
-  return (
-    <div className="mb-3 flex items-center gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-900">
-      <span className="font-bold">!</span>
-      <span className="flex-1">Panel ka plan <b>{when}</b> ({date}) khatam ho raha hai. Uske baad panel band ho jayega — samay rehte support se renew karwa lein.</span>
-      <button type="button" className="text-amber-700 hover:text-amber-900 font-semibold" onClick={() => { try { localStorage.setItem(key, "1"); } catch {} setHidden(true); }}>Theek hai</button>
-    </div>
-  );
-}
 
 // ─── Main Layout ─────────────────────────────────────────────────────────────
 function NoAccess({ roleName, goTo, switchedOff }) {
@@ -490,7 +474,7 @@ export default function CustomDashboardLayout({ children }) {
             }}
           />
           <main className="page-content">
-            {user.access?.plan && <PlanBanner plan={user.access.plan} />}
+            {user.access?.plan && <PlanWarning plan={user.access.plan} trustName={user.trustInfo?.name || user.username} />}
             <div className="page-card">
               {pageAllowed ? children : <NoAccess roleName={user.access?.roleName} goTo={firstAllowed} switchedOff={!!pageMod && !!user.access?.off?.includes(pageMod)} />}
             </div>

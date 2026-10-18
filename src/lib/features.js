@@ -51,8 +51,16 @@ export const EXTRA_FEATURES = [
   { group: "money", key: "auditLog", label: "Activity log", hi: "गतिविधि लॉग", desc: "Kisne kya badla — Settings → Activity log", api: [/^\/audit$/] },
   // sampark + look
   { group: "connect", key: "whatsapp", label: "WhatsApp reminder", hi: "व्हाट्सऐप", desc: "Baki payment / rasid link WhatsApp pe (bina kharche)" },
+  { group: "connect", key: "whatsappApi", label: "WhatsApp API (Gupshup)", hi: "व्हाट्सऐप API", desc: "Auto message — join par certificate, baki rasid, paid rasid + WhatsApp inbox (trust ka apna Gupshup)", api: [/^\/whatsapp\/(?!callback)/] },
   { group: "connect", key: "emailSend", label: "E-mail bhejna", hi: "ई-मेल", desc: "Panel se e-mail bhejna", api: [/^\/email-send$/] },
   { group: "connect", key: "theme", label: "Theme / colours", hi: "थीम", desc: "Settings → Theme se rang badalna", api: [/^\/trust\/theme$/], writeOnly: true },
+  // mobile app (agent + member)
+  { group: "app", key: "mobileApp", label: "Mobile app settings", hi: "मोबाइल ऐप", desc: "Settings → Mobile App: maintenance, update, app se bhugtan, sampark", api: [/^\/trust\/app-settings$/] },
+  { group: "app", key: "appNotifications", label: "App notification bhejna", hi: "ऐप सूचना", desc: "Settings → Notifications: member / agent phones par push (Expo, free) — auto: bhugtan, nayi closing",
+    api: [/^\/notifications\/(send|audience|sent)$/] },
+  { group: "app", key: "appLogins", label: "App logins (kaun, kitne phone)", hi: "ऐप लॉगिन", desc: "Settings → App logins: kitne member / agent ne app mein login kiya, kis phone par — aur phone se logout",
+    api: [/^\/app-logins(\/|$)/] },
+  { group: "app", key: "appPayment", label: "App se bhugtan (UPI / QR / bank)", hi: "ऐप से भुगतान", desc: "Member / agent app mein 'भुगतान करें' — band = app mein button nahi, Settings mein bhugtan wala hissa nahi", api: [/^\/app\/payment$/] },
 ];
 
 const EXTRA_GROUPS = [
@@ -61,12 +69,13 @@ const EXTRA_GROUPS = [
   { key: "members", label: "Members aur form", hi: "सदस्य" },
   { key: "money", label: "Hisaab aur suraksha", hi: "हिसाब / सुरक्षा" },
   { key: "connect", label: "Sampark aur look", hi: "संपर्क" },
+  { key: "app", label: "Mobile app (agent + member)", hi: "मोबाइल ऐप" },
 ];
 
 /** Who may log in besides the trust admin. */
 export const LOGIN_FEATURES = [
-  { key: "agentLogin", label: "Agent login (app)", hi: "एजेंट लॉगिन", desc: "Agents mobile app / panel mein login kar sakein" },
-  { key: "memberLogin", label: "Member login (app)", hi: "सदस्य लॉगिन", desc: "Members apne reg. no. se login kar sakein" },
+  { key: "agentLogin", label: "Agent login (mobile app)", hi: "एजेंट लॉगिन", desc: "Agents mobile app mein login kar sakein — band = app mein 'एजेंट' login dikhega hi nahi" },
+  { key: "memberLogin", label: "Member login (mobile app)", hi: "सदस्य लॉगिन", desc: "Members reg. no. se app mein login kar sakein — band = app mein 'सदस्य' login dikhega hi nahi" },
 ];
 
 export const FEATURE_GROUPS = [
@@ -97,8 +106,31 @@ export function normalizeFeatures(raw) {
     message: String(src.message || "").trim().slice(0, 300),
     expiresAt: exp,                                              // "YYYY-MM-DD" — last day the panel works
     warnDays: Number.isFinite(warn) && warn >= 0 && warn <= 60 ? Math.round(warn) : 7,
+    support: normalizeSupport(src.support),                      // renew contact shown to the trust
     updatedAt: src.updatedAt || null,
   };
+}
+
+/** Renew / support contact (set on /feature-control): shown in the expiry warning and the "panel band" screen. */
+export function normalizeSupport(raw) {
+  const s = raw && typeof raw === "object" ? raw : {};
+  const t = (v, n) => String(v ?? "").trim().slice(0, n);
+  const digits = (v) => t(v, 20).replace(/[^\d+]/g, "");
+  return {
+    name: t(s.name, 80),          // "Lalit Kumar" / company
+    phone: digits(s.phone),       // call
+    whatsapp: digits(s.whatsapp), // WhatsApp (empty = same as phone)
+    email: t(s.email, 120),
+    note: t(s.note, 300),         // "Renew: ₹5000 / saal · UPI xyz@upi"
+  };
+}
+export const hasSupport = (s) => !!(s && (s.name || s.phone || s.whatsapp || s.email || s.note));
+
+/** wa.me link: 10-digit Indian numbers get 91 in front. */
+export function waLink(num, text = "") {
+  let d = String(num || "").replace(/\D/g, "");
+  if (d.length === 10) d = `91${d}`;
+  return d ? `https://wa.me/${d}${text ? `?text=${encodeURIComponent(text)}` : ""}` : null;
 }
 
 const IST_MS = 5.5 * 3600 * 1000;
@@ -154,10 +186,11 @@ export const hasFeature = (access, key) => access?.features?.[key] !== false;
 export const FEATURE_PRESETS = [
   { key: "full", label: "Sab chalu", desc: "Poora panel", off: [] },
   { key: "standard", label: "Standard", desc: "Builder, theme, staff users, e-mail, cash hisaab, activity log band",
-    off: ["certificateBuilder", "theme", "users", "emailSend", "cashHandover", "auditLog", "rasidDesign"] },
+    off: ["certificateBuilder", "theme", "users", "emailSend", "cashHandover", "auditLog", "rasidDesign", "whatsappApi"] },
   { key: "basic", label: "Basic", desc: "Sirf members, yojna, payments, closing",
     off: ["reports", "commission", "users", "certificateBuilder", "theme", "receipts", "rasidDesign", "upiQr", "verifyQr", "paymentPdf", "exports",
-      "emailSend", "countDisplay", "memberLogin", "cashHandover", "auditLog", "whatsapp", "duplicateCheck", "blankForm"] },
+      "emailSend", "countDisplay", "memberLogin", "cashHandover", "auditLog", "whatsapp", "duplicateCheck", "blankForm", "appPayment",
+      "appNotifications", "appLogins", "whatsappApi"] },
 ];
 
 export function presetFlags(presetKey) {

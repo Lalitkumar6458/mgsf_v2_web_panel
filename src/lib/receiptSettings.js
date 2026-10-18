@@ -72,8 +72,16 @@ export const themeOf = (key) => RECEIPT_THEMES.find((t) => t.key === key) || REC
 export const layoutOf = (key) => RECEIPT_LAYOUTS.find((l) => l.key === key) || RECEIPT_LAYOUTS[0];
 
 /** upi://pay link a phone's UPI app opens with the amount filled in. */
+// The standard NPCI "upi://pay" link — Google Pay, PhonePe, Paytm, BHIM and bank apps all read it.
+// Amount as "450.00" (blank / 0 = payer types it), spaces as %20 and the VPA's "@" left as is:
+// some UPI apps reject "%40" or "+".
 export function upiLink({ upiId, upiName, amount, note }) {
-  const q = new URLSearchParams({ pa: upiId, pn: upiName || "Trust", am: String(Math.round(Number(amount) || 0)), cu: "INR" });
+  const q = new URLSearchParams();
+  q.set("pa", String(upiId || "").trim());
+  q.set("pn", upiName || "Trust");
+  const amt = Math.round(Number(amount) || 0);
+  if (amt > 0) q.set("am", amt.toFixed(2));
+  q.set("cu", "INR");
   if (note) q.set("tn", String(note).slice(0, 60));
-  return `upi://pay?${q.toString()}`;
+  return `upi://pay?${q.toString().replace(/\+/g, "%20").replace(/%40/g, "@")}`;
 }

@@ -14,6 +14,12 @@ const ThemeSettings = dynamic(() => import('@/components/screen/settings/ThemeSe
 const CertificateBuilder = dynamic(() => import('@/components/screen/settings/certificate/CertificateBuilder'), { ssr: false });
 const ReceiptSettings = dynamic(() => import('@/components/screen/settings/ReceiptSettings'), { ssr: false });
 const ActivityLog = dynamic(() => import('@/components/screen/settings/ActivityLog'), { ssr: false });
+const MobileAppSettings = dynamic(() => import('@/components/screen/settings/MobileAppSettings'), { ssr: false });
+const AppNotifications = dynamic(() => import('@/components/screen/settings/AppNotifications'), { ssr: false });
+const AppLogins = dynamic(() => import('@/components/screen/settings/AppLogins'), { ssr: false });
+const WhatsAppSettings = dynamic(() => import('@/components/screen/settings/WhatsAppSettings'), { ssr: false });
+const WhatsAppInbox = dynamic(() => import('@/components/screen/settings/WhatsAppInbox'), { ssr: false });
+import { FaWhatsapp } from 'react-icons/fa';
 import {
   BsBank2,
   BsShieldLock,
@@ -29,6 +35,8 @@ import {
   BsPalette,
   BsClockHistory,
   BsReceipt,
+  BsPhone,
+  BsBell,
 } from 'react-icons/bs';
 import { useAuth } from '@/lib/AuthProvider';
 
@@ -63,6 +71,46 @@ const menuItems = [
     description: 'Rasid ka size, rang, UPI QR, sign',
     module: 'settings',
     feature: ['receipts', 'rasidDesign'],
+  },
+  {
+    key: 'mobileApp',
+    icon: <BsPhone size={18} />,
+    label: 'Mobile App',
+    description: 'Maintenance, update, app se bhugtan, sampark',
+    module: 'settings',
+    feature: 'mobileApp',
+  },
+  {
+    key: 'notifications',
+    icon: <BsBell size={18} />,
+    label: 'Notifications',
+    description: 'Member / agent phones par suchna bhejna',
+    module: 'settings',
+    feature: 'appNotifications',
+  },
+  {
+    key: 'appLogins',
+    icon: <BsPeople size={18} />,
+    label: 'App logins',
+    description: 'Kitne member / agent ne app mein login kiya, phone se logout',
+    module: 'settings',
+    feature: 'appLogins',
+  },
+  {
+    key: 'whatsapp',
+    icon: <FaWhatsapp size={18} />,
+    label: 'WhatsApp',
+    description: 'Gupshup: join / baki / jama message, template, status',
+    module: 'settings',
+    feature: 'whatsappApi',
+  },
+  {
+    key: 'waInbox',
+    icon: <FaWhatsapp size={18} />,
+    label: 'WhatsApp inbox',
+    description: 'Members ke jawab, reply',
+    module: 'settings',
+    feature: 'whatsappApi',
   },
   {
     key: 'activity',
@@ -155,6 +203,16 @@ const SettingsPage = () => {
         return <ThemeSettings />;
       case 'activity':
         return <ActivityLog />;
+      case 'mobileApp':
+        return <MobileAppSettings />;
+      case 'notifications':
+        return <AppNotifications />;
+      case 'appLogins':
+        return <AppLogins />;
+      case 'whatsapp':
+        return <WhatsAppSettings />;
+      case 'waInbox':
+        return <WhatsAppInbox />;
       case 'receipt':
         return <ReceiptSettings />;
       case 'Rules & Policies':

@@ -1,13 +1,14 @@
 // PDF renderer running in its own thread, so a 1000-page PDF does not freeze the API for
 // everyone else. Bundled by scripts/build-workers.mjs → workers/receipt-worker.mjs
 // (pdfkit / qrcode stay external, resolved from node_modules).
-//   message: { id, kind: "receipts" | "transactions", props }
+//   message: { id, kind: "receipts" | "transactions" | "list", props }
 // Both are drawn straight with pdfkit (react-pdf's layout was far too slow for big runs).
 import { parentPort } from "node:worker_threads";
 import { buildTransactionsReport } from "@/lib/pdf/transactionsReport";
 import { buildReceipts } from "@/lib/pdf/receipts";
+import { buildListReport } from "@/lib/pdf/listReport";
 
-const BUILDERS = { receipts: buildReceipts, transactions: buildTransactionsReport };
+const BUILDERS = { receipts: buildReceipts, transactions: buildTransactionsReport, list: buildListReport };
 
 parentPort.on("message", async ({ id, kind = "receipts", props }) => {
   try {

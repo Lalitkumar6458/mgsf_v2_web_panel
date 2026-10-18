@@ -23,6 +23,11 @@ export const PRESETS = [
   { key: "rose", name: "Rose Light", hi: "गुलाबी", primary: "#e11d48", sidebar: "light" },
   { key: "forest", name: "Forest Light", hi: "हरियाली", primary: "#15803d", sidebar: "light" },
   { key: "graphite", name: "Graphite", hi: "स्लेटी", primary: "#475569", sidebar: "dark", dark: "#111827" },
+  { key: "sky", name: "Aasmani", hi: "आसमानी", primary: "#0284c7", sidebar: "brand" },
+  { key: "rani", name: "Rani Pink", hi: "रानी गुलाबी", primary: "#c026d3", sidebar: "dark", dark: "#1f0a24" },
+  { key: "mehendi", name: "Mehendi", hi: "मेहंदी", primary: "#4d7c0f", sidebar: "dark", dark: "#141a08" },
+  { key: "copper", name: "Tamba (Copper)", hi: "ताँबा", primary: "#b45309", sidebar: "brand" },
+  { key: "lavender", name: "Lavender Light", hi: "लैवेंडर", primary: "#6d28d9", sidebar: "light" },
 ];
 
 export const DEFAULT_THEME = { preset: "royal" };

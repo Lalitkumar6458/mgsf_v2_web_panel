@@ -1,8 +1,9 @@
 import { route, readJson } from "@/lib/http.js";
 import { getMemberFor } from "@/lib/auth.js";
-import { adminOnly } from "@/lib/access.js";
+import { adminOnly, publicOrigin } from "@/lib/access.js";
 import { acceptMember } from "@/services/members.js";
-import { notifyAgent } from "@/lib/push.js";
+import { notifyAgent, later } from "@/lib/push.js";
+import { onJoin } from "@/services/whatsapp.js";
 
 /** Accept a pending request: reg number + login account + dues for current closings.
  *  Body (optional): fields from the accept dialog — joinFeesDone, joinFeesPaymentType, joinFeesPaidAmount, … */
@@ -17,5 +18,6 @@ export const POST = route(async ({ request, auth, params }) => {
       data: { memberId: m.id },
     }).catch(() => {});
   }
+  later(() => onJoin(m.program.adminId, params.memberId, publicOrigin(request)));
   return r;
 });

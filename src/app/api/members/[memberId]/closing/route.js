@@ -1,13 +1,19 @@
 import { route, readJson } from "@/lib/http.js";
 import { getMemberFor } from "@/lib/auth.js";
-import { adminOnly } from "@/lib/access.js";
+import { adminOnly, publicOrigin } from "@/lib/access.js";
+import { onClosing } from "@/services/whatsapp.js";
 import { recordClosing, updateClosing, revertClosing } from "@/services/closings.js";
+import { later } from "@/lib/push.js";
+import { notifyClosing } from "@/services/autoNotify.js";
 
 /** Record marriage: { closingDate, closingGroupId?, closingNotes?, invitationCardUrl?, pdfData? } */
 export const POST = route(async ({ request, auth, params }) => {
   adminOnly(auth);
-  await getMemberFor(auth, params.memberId, { forWrite: true });
-  return recordClosing(params.memberId, await readJson(request));
+  const m = await getMemberFor(auth, params.memberId, { forWrite: true });
+  const r = await recordClosing(params.memberId, await readJson(request));
+  later(() => notifyClosing(m.program?.adminId || auth.adminId, params.memberId));
+  later(() => onClosing(m.program?.adminId || auth.adminId, params.memberId, publicOrigin(request)));
+  return r;
 });
 
 /** Edit closing (date change re-syncs dues) */

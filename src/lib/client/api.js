@@ -28,7 +28,7 @@ async function request(method, path, body, query) {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     if (res.status === 401 && typeof window !== "undefined" && !path.startsWith("/auth/")) {
-      window.dispatchEvent(new Event("mgsf:unauthorized"));
+      window.dispatchEvent(new CustomEvent("mgsf:unauthorized", { detail: data.details || null }));
     }
     throw new ApiError(data.error || `Request failed (${res.status})`, res.status, data.details);
   }
@@ -39,6 +39,7 @@ export const api = {
   get: (path, query) => request("GET", path, undefined, query),
   post: (path, body) => request("POST", path, body ?? {}),
   patch: (path, body) => request("PATCH", path, body ?? {}),
+  put: (path, body) => request("PUT", path, body ?? {}),
   del: (path, query) => request("DELETE", path, undefined, query),
   /** Upload a File/Blob → { url } */
   upload: (file, folder = "members") => {

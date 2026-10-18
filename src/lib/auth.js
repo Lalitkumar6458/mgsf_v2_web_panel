@@ -3,11 +3,11 @@
 import bcrypt from "bcryptjs";
 import { SignJWT, jwtVerify } from "jose";
 import { createHash, randomInt } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq, and, isNull, sql } from "drizzle-orm";
 import { db, schema } from "../db/index.js";
-import { unauthorized, forbidden, notFound } from "./errors.js";
+import { unauthorized, forbidden, notFound, HttpError } from "./errors.js";
 import { FULL_ACCESS, normalizePermissions } from "./permissions.js";
-import { disabledModules, DEFAULT_BLOCK_MESSAGE, planState, EXPIRED_MESSAGE } from "./features.js";
+import { disabledModules, DEFAULT_BLOCK_MESSAGE, planState, EXPIRED_MESSAGE, hasSupport } from "./features.js";
 import { getTrustFeatures } from "../services/features.js";
 
 export const COOKIE_NAME = "mgsf_token";
@@ -25,13 +25,31 @@ export const verifyPassword = (plain, hash) => bcrypt.compare(String(plain ?? ""
 export const sha256 = (s) => createHash("sha256").update(String(s)).digest("hex");
 export const sixDigitCode = () => String(randomInt(100000, 1000000));
 
-/** Create a session row + signed token for an account. */
-export async function issueToken(account, { userAgent = "", ip = "" } = {}) {
-  const [session] = await db
-    .insert(schema.sessions)
-    .values({ accountId: account.id, userAgent: String(userAgent).slice(0, 300), ip: String(ip).slice(0, 60) })
-    .returning();
-  await db.update(schema.accounts).set({ lastLoginAt: new Date() }).where(eq(schema.accounts.id, account.id));
+/** The mobile app tells which phone it is (headers X-Device / X-Platform / X-App-Version). */
+export function deviceFrom(request) {
+  const h = (k, n) => String(request.headers.get(k) || "").replace(/[\u0000-\u001f]/g, "").trim().slice(0, n);
+  return { device: h("x-device", 80), platform: h("x-platform", 40), appVersion: h("x-app-version", 20) };
+}
+
+/**
+ * Signed token for an account. New login → a new session row (one row = one phone / browser).
+ * sessionId given (the app renewing its login) → the SAME row is reused, so a phone stays one phone.
+ */
+export async function issueToken(account, { userAgent = "", ip = "", device = "", platform = "", appVersion = "", sessionId = null } = {}) {
+  const info = {
+    userAgent: String(userAgent).slice(0, 300), ip: String(ip).slice(0, 60),
+    ...(device ? { device } : {}), ...(platform ? { platform } : {}), ...(appVersion ? { appVersion } : {}),
+  };
+  let session = null;
+  if (sessionId) {
+    [session] = await db.update(schema.sessions).set({ ...info, lastSeenAt: new Date() })
+      .where(and(eq(schema.sessions.id, sessionId), eq(schema.sessions.accountId, account.id), isNull(schema.sessions.revokedAt)))
+      .returning();
+  }
+  if (!session) {
+    [session] = await db.insert(schema.sessions).values({ accountId: account.id, ...info }).returning();
+    await db.update(schema.accounts).set({ lastLoginAt: new Date() }).where(eq(schema.accounts.id, account.id));
+  }
   const token = await new SignJWT({ sid: session.id, role: account.role })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(account.id)
@@ -83,7 +101,7 @@ export async function getAuth(request) {
   // feature lock of the trust (secret /feature-control page) — owner is never limited
   const features = a.role !== "owner" && a.adminId ? await getTrustFeatures(a.adminId) : null;
   const block = loginBlock(a, features);
-  if (block) throw unauthorized(block);
+  if (block) throw await blockedError(401, a, features, block);
   // trust staff: super admin (no role) or a custom role's permissions
   let access = a.role === "owner" ? { isSuper: true, permissions: FULL_ACCESS, roleName: "Owner" } : null;
   if (a.role === "admin") {
@@ -96,7 +114,8 @@ export async function getAuth(request) {
     access.off = disabledModules(features);
     access.features = features.flags;
     const plan = planState(features);
-    if (plan.warn) access.plan = { expiresAt: plan.expiresAt, daysLeft: plan.daysLeft }; // banner in the panel
+    // warning popup + banner in the panel, with the renew contact from /feature-control
+    if (plan.warn) access.plan = { expiresAt: plan.expiresAt, daysLeft: plan.daysLeft, support: hasSupport(features.support) ? features.support : null };
   }
   return {
     access,
@@ -122,6 +141,24 @@ export function loginBlock(account, features) {
   if (account.role === "agent" && features.flags.agentLogin === false) return "Agent login abhi band hai — trust se sampark karein.";
   if (account.role === "member" && features.flags.memberLogin === false) return "Member login abhi band hai — trust se sampark karein.";
   return null;
+}
+
+/**
+ * Whole panel closed (switched off / plan over) → error whose details carry what the
+ * "panel band" screen shows: { blocked: { reason, message, expiresAt, support, trustName } }.
+ * Agent / member logins switched off → plain error (the mobile app shows the message).
+ */
+export async function blockedError(status, account, features, message) {
+  const reason = !features?.active ? "inactive" : planState(features).expired ? "expired" : null;
+  if (!reason) return new HttpError(status, message);
+  let trustName = null;
+  try {
+    const { rows: [r] } = await db.execute(sql`SELECT coalesce(trust_info->>'name', display_name) AS n FROM admins WHERE id = ${account.adminId}`);
+    trustName = r?.n || null;
+  } catch { /* name is only decoration */ }
+  return new HttpError(status, message, {
+    blocked: { reason, message, expiresAt: features.expiresAt, support: hasSupport(features.support) ? features.support : null, trustName },
+  });
 }
 
 export function requireRole(auth, ...roles) {

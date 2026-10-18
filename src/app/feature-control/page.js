@@ -6,13 +6,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { App, Button, Input, Switch, Tag, Tooltip, Empty, Spin, Popconfirm, DatePicker, InputNumber } from "antd";
 import dayjs from "dayjs";
 import {
-  FiLock, FiLogOut, FiSearch, FiCheck, FiRotateCcw, FiPower, FiMonitor, FiZap, FiLogIn, FiUsers, FiAlertTriangle, FiCalendar, FiFileText, FiAward, FiShield, FiMessageCircle,
+  FiLock, FiLogOut, FiSearch, FiCheck, FiRotateCcw, FiPower, FiMonitor, FiZap, FiLogIn, FiUsers, FiAlertTriangle, FiCalendar, FiFileText, FiPhone, FiCopy, FiAward, FiShield, FiMessageCircle, FiSmartphone,
 } from "react-icons/fi";
 import {
-  FEATURE_GROUPS, FEATURE_KEYS, FEATURE_PRESETS, presetFlags, normalizeFeatures, DEFAULT_BLOCK_MESSAGE, planState,
+  FEATURE_GROUPS, FEATURE_KEYS, FEATURE_PRESETS, presetFlags, normalizeFeatures, normalizeSupport, DEFAULT_BLOCK_MESSAGE, planState,
 } from "@/lib/features";
 
-const GROUP_ICON = { screens: FiMonitor, rasid: FiFileText, certificate: FiAward, members: FiUsers, money: FiShield, connect: FiMessageCircle, logins: FiLogIn };
+const GROUP_ICON = { screens: FiMonitor, rasid: FiFileText, certificate: FiAward, members: FiUsers, money: FiShield, connect: FiMessageCircle, app: FiSmartphone, logins: FiLogIn };
 
 async function call(method, path, body) {
   const res = await fetch(`/api/control${path}`, {
@@ -28,7 +28,8 @@ async function call(method, path, body) {
 const fmtDate = (d) => (d ? new Date(d).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—");
 const offOf = (f) => FEATURE_KEYS.filter((k) => f.flags[k] === false).length;
 const same = (a, b) => a && b && a.active === b.active && (a.message || "") === (b.message || "")
-  && (a.expiresAt || null) === (b.expiresAt || null) && a.warnDays === b.warnDays && FEATURE_KEYS.every((k) => a.flags[k] === b.flags[k]);
+  && (a.expiresAt || null) === (b.expiresAt || null) && a.warnDays === b.warnDays && FEATURE_KEYS.every((k) => a.flags[k] === b.flags[k])
+  && JSON.stringify(normalizeSupport(a.support)) === JSON.stringify(normalizeSupport(b.support));
 
 // ─── Key screen ──────────────────────────────────────────────────────────────
 function KeyScreen({ onIn }) {
@@ -120,7 +121,7 @@ export default function FeatureControlPage() {
   const save = async () => {
     setSaving(true);
     try {
-      const { features } = await call("PUT", `/trusts/${sel.id}`, { flags: draft.flags, active: draft.active, message: draft.message, expiresAt: draft.expiresAt, warnDays: draft.warnDays });
+      const { features } = await call("PUT", `/trusts/${sel.id}`, { flags: draft.flags, active: draft.active, message: draft.message, expiresAt: draft.expiresAt, warnDays: draft.warnDays, support: draft.support });
       setTrusts((list) => list.map((t) => (t.id === sel.id ? { ...t, features } : t)));
       message.success("Save ho gaya — trust ke panel mein 30 second ke andar lag jayega");
     } catch (e) {
@@ -128,6 +129,27 @@ export default function FeatureControlPage() {
       message.error(e.message);
     } finally { setSaving(false); }
   };
+
+  // same renew contact on every trust (saves only the contact; each trust keeps its own lock + plan)
+  const supportToAll = async () => {
+    setSaving(true);
+    try {
+      const out = [];
+      for (const t of trusts) {
+        // the open trust: its unsaved edits are saved too (the list refresh would reset them)
+        const base = t.id === sel.id ? draft : normalizeFeatures(t.features);
+        const { features } = await call("PUT", `/trusts/${t.id}`, { ...base, support: draft.support });
+        out.push([t.id, features]);
+      }
+      const m = new Map(out);
+      setTrusts((list) => list.map((t) => (m.has(t.id) ? { ...t, features: m.get(t.id) } : t)));
+      message.success(`Contact ${out.length} trust par lag gaya`);
+    } catch (e) {
+      if (e.status === 401) setState("key");
+      message.error(e.message);
+    } finally { setSaving(false); }
+  };
+  const setSupport = (k, v) => setDraft((d) => ({ ...d, support: { ...d.support, [k]: v } }));
 
   const logout = async () => { await call("DELETE", "/session").catch(() => {}); setTrusts([]); setState("key"); };
 
@@ -248,6 +270,26 @@ export default function FeatureControlPage() {
                 );
               })()}
 
+              {/* renew / support contact */}
+              <section className="fc-card">
+                <div className="fc-card-head">
+                  <div className="fc-card-title"><FiPhone /> Renew / support contact</div>
+                  {trusts.length > 1 && (
+                    <Popconfirm title={`Ye contact sab ${trusts.length} trust par lagayein?`} okText="Haan" cancelText="Nahi" onConfirm={supportToAll}>
+                      <Button size="small" icon={<FiCopy />} loading={saving}>Sab trust par lagao</Button>
+                    </Popconfirm>
+                  )}
+                </div>
+                <div className="fc-row-desc" style={{ marginBottom: 10 }}>Plan khatam hone ki warning (popup) aur &quot;panel band&quot; screen par yahi dikhega — Call, WhatsApp, E-mail button ke saath.</div>
+                <div className="fc-support">
+                  <Input placeholder="Naam / company (jaise Lalit Kumar)" maxLength={80} value={draft.support.name} onChange={(e) => setSupport("name", e.target.value)} />
+                  <Input placeholder="Mobile (call)" maxLength={20} value={draft.support.phone} onChange={(e) => setSupport("phone", e.target.value)} />
+                  <Input placeholder="WhatsApp (khaali = mobile wala)" maxLength={20} value={draft.support.whatsapp} onChange={(e) => setSupport("whatsapp", e.target.value)} />
+                  <Input placeholder="E-mail" maxLength={120} value={draft.support.email} onChange={(e) => setSupport("email", e.target.value)} />
+                  <Input.TextArea className="fc-support-note" rows={2} maxLength={300} showCount placeholder="Note (jaise: Renew ₹5000 / saal · UPI: xyz@upi · Subah 10–7 baje)" value={draft.support.note} onChange={(e) => setSupport("note", e.target.value)} />
+                </div>
+              </section>
+
               {/* presets */}
               <section className="fc-presets">
                 <span className="fc-muted">Jaldi set karein:</span>
@@ -354,6 +396,9 @@ const CSS = `
 .fc-power-icon { width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; background: #16a34a; color: #fff; font-size: 18px; flex-shrink: 0; }
 .fc-power.is-off .fc-power-icon { background: #dc2626; }
 .fc-msg { margin-top: 10px; }
+.fc-support { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.fc-support-note { grid-column: 1 / -1; margin-bottom: 14px; }
+@media (max-width: 640px) { .fc-support { grid-template-columns: 1fr; } }
 .fc-plan { border-color: #bfdbfe; background: #eff6ff; } .fc-plan .fc-power-icon { background: #2563eb; }
 .fc-plan.is-warn { border-color: #fcd34d; background: #fffbeb; } .fc-plan.is-warn .fc-power-icon { background: #d97706; }
 .fc-plan.is-off { border-color: #fecaca; background: #fef2f2; } .fc-plan.is-off .fc-power-icon { background: #dc2626; }

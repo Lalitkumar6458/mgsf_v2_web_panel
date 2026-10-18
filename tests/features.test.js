@@ -5,11 +5,11 @@ import assert from "node:assert/strict";
 import { sql } from "drizzle-orm";
 import { db, pool, schema } from "../src/db/index.js";
 import {
-  normalizeFeatures, disabledModules, featureForApi, presetFlags, FEATURE_KEYS, hasFeature,
+  normalizeFeatures, disabledModules, featureForApi, presetFlags, FEATURE_KEYS, hasFeature, waLink, todayIST,
 } from "../src/lib/features.js";
 import { can } from "../src/lib/permissions.js";
 import { assertApiAccess } from "../src/lib/apiAccess.js";
-import { loginBlock } from "../src/lib/auth.js";
+import { loginBlock, blockedError } from "../src/lib/auth.js";
 import { getTrustFeatures, saveTrustFeatures, listTrustFeatures, clearFeatureCache } from "../src/services/features.js";
 import { checkKey, controlEnabled, issueControlToken, requireControl, CONTROL_COOKIE } from "../src/lib/controlAuth.js";
 
@@ -131,4 +131,29 @@ test("new switches: grouped on the control page, guard their APIs", async () => 
   assert.equal(f("GET", "/api/trust/receipt-settings"), null);
   const admin = { role: "admin", access: { isSuper: true, off: [] }, features: normalizeFeatures({ flags: { duplicateCheck: false } }).flags };
   assert.throws(() => assertApiAccess(admin, req("GET", "/api/members/duplicates")), /Duplicate/);
+});
+
+test("renew contact: cleaned, saved, sent with the expired / closed block", async () => {
+  const f = normalizeFeatures({ support: { name: "  Lalit ", phone: "+91 98765-43210", email: "a@b.in", bogus: 1 } });
+  assert.deepEqual(f.support, { name: "Lalit", phone: "+919876543210", whatsapp: "", email: "a@b.in", note: "" });
+  assert.equal(normalizeFeatures(null).support.phone, "");
+  assert.equal(waLink("98765 43210", "hi there"), "https://wa.me/919876543210?text=hi%20there");
+  assert.equal(waLink(""), null);
+
+  const old = new Date(Date.parse(todayIST()) - 3 * 86400000).toISOString().slice(0, 10);
+  const saved = await saveTrustFeatures(trust.id, { expiresAt: old, support: { name: "Lalit", phone: "9876543210" } });
+  assert.equal(saved.support.name, "Lalit");
+  const e = await blockedError(403, { adminId: trust.id, role: "admin" }, saved, loginBlock({ role: "admin" }, saved));
+  assert.equal(e.status, 403);
+  assert.equal(e.details.blocked.reason, "expired");
+  assert.equal(e.details.blocked.expiresAt, old);
+  assert.equal(e.details.blocked.support.phone, "9876543210");
+  assert.equal(e.details.blocked.trustName, "Feature Trust");
+  const off = normalizeFeatures({ active: false });
+  const e2 = await blockedError(401, { adminId: trust.id }, off, "x");
+  assert.deepEqual([e2.details.blocked.reason, e2.details.blocked.support], ["inactive", null]);
+  // agent login switched off is not a "panel band" screen
+  const e3 = await blockedError(403, { adminId: trust.id, role: "agent" }, normalizeFeatures({ flags: { agentLogin: false } }), "x");
+  assert.equal(e3.details, undefined);
+  await saveTrustFeatures(trust.id, {});
 });

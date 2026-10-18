@@ -64,6 +64,11 @@ export const sessions = pgTable("sessions", {
   createdAt: createdAt(),
   lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
   revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  // mobile app: which phone + its own Expo push token (0010_session_device)
+  device: text("device").notNull().default(""),
+  platform: text("platform").notNull().default(""),
+  appVersion: text("app_version").notNull().default(""),
+  pushToken: text("push_token"),
 }, (t) => [index("sessions_account_idx").on(t.accountId)]);
 
 // OTPs live in the DB (old code kept them in memory → broke on serverless)
@@ -465,3 +470,32 @@ export const receiptRegister = pgTable("receipt_register", {
   createdBy: str("created_by"),
   createdAt: createdAt(),
 }, (t) => [index("receipt_register_member_idx").on(t.programId, t.memberId)]);
+
+// ─── WhatsApp (Gupshup), migration 0011 ─────────────────────────────────────
+// Sent messages (join / pending / paid / reply / test) and the inbox (direction "in").
+export const whatsappMessages = pgTable("whatsapp_messages", {
+  id: id(),
+  adminId: text("admin_id").notNull().references(() => admins.id, { onDelete: "cascade" }),
+  direction: text("direction").notNull().default("out"),       // out | in
+  phone: text("phone").notNull(),                               // 91XXXXXXXXXX
+  memberId: text("member_id"),
+  event: str("event"),                                          // join | pending | paid | reply | test | inbound
+  templateId: str("template_id"),
+  params: json("params", []),
+  body: str("body"),                                            // text shown in the panel
+  mediaUrl: str("media_url"),
+  mediaType: str("media_type"),
+  status: text("status").notNull().default("queued"),          // queued submitted enqueued sent delivered read failed received
+  providerId: text("provider_id"),                              // Gupshup messageId
+  gsId: text("gs_id"),
+  error: str("error"),
+  data: json("data", {}),
+  readAt: timestamp("read_at", { withTimezone: true }),         // inbox: seen in the panel
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+}, (t) => [
+  index("wa_admin_idx").on(t.adminId, t.createdAt),
+  index("wa_phone_idx").on(t.adminId, t.phone, t.createdAt),
+  index("wa_provider_idx").on(t.providerId),
+  index("wa_member_event_idx").on(t.memberId, t.event),
+]);

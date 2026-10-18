@@ -43,7 +43,8 @@ test("amount in words, UPI id check, settings normalize", () => {
   assert.equal(s.showUpiQr, false); // no valid UPI id → no QR
   assert.equal(s.dueDays, 15);
   assert.equal(s.signImg, ""); // data URLs are never stored
-  assert.match(upiLink({ upiId: "trust@sbi", upiName: "T", amount: 450.4 }), /^upi:\/\/pay\?pa=trust%40sbi&pn=T&am=450&cu=INR/);
+  assert.equal(upiLink({ upiId: "trust@sbi", upiName: "Shri Trust", amount: 450.4, note: "R1 Jan" }), "upi://pay?pa=trust@sbi&pn=Shri%20Trust&am=450.00&cu=INR&tn=R1%20Jan");
+  assert.equal(upiLink({ upiId: "trust@sbi", upiName: "T", amount: 0 }), "upi://pay?pa=trust@sbi&pn=T&cu=INR");
 });
 
 test("plan: numbers only for members with rows of the wanted status; pages by layout", () => {

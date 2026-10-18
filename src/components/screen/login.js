@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { App } from 'antd';
 import { Modal, Input } from 'antd';
 import { api } from '@/lib/client/api';
+import { useAuth } from '@/lib/AuthProvider';
 import { TRUST_DEFAULTS, displayName, initials } from '@/lib/trust/profile';
 
 const OTP_TIMEOUT = 60;
@@ -79,6 +80,9 @@ const Loader = () => (
 // ─── Main ─────────────────────────────────────────────────────────────────────
 const LoginPage = () => {
   const { message } = App.useApp();
+  const { setBlocked } = useAuth() || {};
+  // panel plan over / switched off → full screen with the renew contact instead of a small alert
+  const fail = (err, fallback) => { if (err?.details?.blocked && setBlocked) setBlocked(err.details.blocked); else showAlert(err?.message || fallback, 'error'); };
 
   const [step, setStep]         = useState(1);
   // trust name/logo from Settings → Organization (public endpoint, no login needed)
@@ -143,7 +147,7 @@ const LoginPage = () => {
     if (!otpVal || otpVal.length !== 6) { showAlert('Please enter the 6-digit OTP.', 'error'); return; }
     setLoading(true);
     try { await doLogin(otpVal); }
-    catch (err) { showAlert(err.message || 'OTP verification failed.', 'error'); }
+    catch (err) { fail(err, 'OTP verification failed.'); }
     setLoading(false);
   };
 
@@ -153,7 +157,7 @@ const LoginPage = () => {
     if (!passVal || passVal.length < 6) { showAlert('Password must be at least 6 characters.', 'error'); return; }
     setLoading(true);
     try { await doLogin(); }
-    catch (err) { showAlert(err.message || 'Login failed.', 'error'); }
+    catch (err) { fail(err, 'Login failed.'); }
     setLoading(false);
   };
 

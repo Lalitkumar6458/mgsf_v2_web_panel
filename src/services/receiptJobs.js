@@ -72,6 +72,7 @@ async function getWorker() {
 /** Same PDF drawn in this thread — when the worker bundle is missing or out of date. */
 async function renderHere(props, kind) {
   if (kind === "transactions") return (await import("@/lib/pdf/transactionsReport")).buildTransactionsReport(props);
+  if (kind === "list") return (await import("@/lib/pdf/listReport")).buildListReport(props);
   return (await import("@/lib/pdf/receipts")).buildReceipts(props);
 }
 
@@ -86,6 +87,11 @@ export async function renderPdf(props, kind = "receipts") {
       w.postMessage({ id, kind, props });
     });
   } catch (e) {
+    // an older bundle that does not know this kind yet → draw here instead of failing
+    if (/unknown PDF kind/.test(e?.message || "")) {
+      console.warn("[pdf] worker bundle is out of date — run `npm run build:workers`; drawing in the main thread");
+      return renderHere(props, kind);
+    }
     if (e?.code !== "ENOENT") throw e;
     console.warn("[pdf] worker bundle missing — run `npm run build:workers`; drawing in the main thread");
     return renderHere(props, kind);

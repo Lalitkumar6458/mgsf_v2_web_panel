@@ -3,7 +3,9 @@ import { route, readJson } from "@/lib/http.js";
 import { getProgramFor } from "@/lib/auth.js";
 import { forbidden } from "@/lib/errors.js";
 import { createMember, listMembers } from "@/services/members.js";
-import { notifyAgent } from "@/lib/push.js";
+import { notifyAgent, later } from "@/lib/push.js";
+import { publicOrigin } from "@/lib/access.js";
+import { onJoin } from "@/services/whatsapp.js";
 
 /** GET ?status=&agentId=&q=&closed=true|false&page=&pageSize=&sort=newest|name|regno|application */
 export const GET = route(async ({ auth, params, query }) => {
@@ -28,5 +30,7 @@ export const POST = route(async ({ request, auth, params }) => {
   } else if (m.agentId) {
     notifyAgent(program.adminId, m.agentId, { title: "नया सदस्य जोड़ दिया गया", body, data: { memberId: m.id } }).catch(() => {});
   }
+  // accepted straight away → WhatsApp welcome with the certificate
+  if (r.member?.status === "accepted") later(() => onJoin(program.adminId, m.id, publicOrigin(request)));
   return r;
 });

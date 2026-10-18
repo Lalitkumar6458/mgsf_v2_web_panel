@@ -7,7 +7,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../db/index.js";
 
 // paths that are not "changes" worth a log line
-const SKIP = [/^\/auth\//, /^\/upload$/, /^\/files\//, /^\/notifications/, /^\/receipts\/(jobs|preview)/, /^\/control\//, /^\/email-send$/];
+const SKIP = [/^\/auth\//, /^\/upload$/, /^\/files\//, /^\/notifications/, /^\/receipts\/(jobs|preview)/, /^\/control\//, /^\/email-send$/, /^\/app\/(upload|refresh|push-test)$/];
 const SECRET_KEYS = /pass(word)?|otp|token|secret|key$/i;
 
 const ENTITY_LABEL = {
@@ -32,6 +32,9 @@ export function describeRequest(method, pathname) {
   const seg = p.split("/").filter(Boolean);
   const hit = (re) => p.match(re);
   let r;
+  if ((r = hit(/^\/app-logins\/([^/]+)$/))) return { action: "update", entity: "user", entityId: r[1], what: "App login: phone se logout" };
+  if ((r = hit(/^\/app\/requests\/([^/]+)$/))) return { action: act === "delete" ? "delete" : "update", entity: "member", entityId: r[1], what: act === "delete" ? "एजेंट ने अनुरोध हटाया" : "एजेंट ने अनुरोध बदला" };
+  if (hit(/^\/trust\/app-settings$/)) return { action: "update", entity: "trust", entityId: "", what: "mobile app settings" };
   if ((r = hit(/^\/transactions\/([^/]+)\/reverse$/))) return { action: "reverse", entity: "payment", entityId: r[1] };
   if ((r = hit(/^\/members\/([^/]+)\/accept$/))) return { action: "accept", entity: "member", entityId: r[1] };
   if ((r = hit(/^\/members\/([^/]+)\/status$/))) return { action: "status", entity: "member", entityId: r[1] };

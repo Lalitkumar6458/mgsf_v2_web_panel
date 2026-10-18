@@ -161,6 +161,10 @@ Sab requests mein login token chahiye (web: cookie, app: `Authorization: Bearer 
 | GET / POST, GET / PATCH / DELETE | `/api/agents`, `/api/agents/:id` | |
 | POST | `/api/upload` | photo / document upload → URL |
 | GET / POST / PATCH | `/api/notifications` | list / bhejna (push + in-app) / read |
+| POST · GET · GET | `/api/notifications/send` · `/audience` · `/sent` | panel se Expo push bhejna · kitne phone tak · history |
+| GET · GET / DELETE | `/api/app-logins` · `/api/app-logins/:accountId` | app login ginti + list · phones / logout |
+| GET / PUT | `/api/trust/app-settings` | Settings → Mobile App (maintenance, update, bhugtan, sampark, auto-notification) |
+| — | `/api/app/*` | mobile app: status, config, session, refresh, family, member khata, agent tabs, requests, PDFs, payment, upload, logo, push-test |
 | GET / POST | `/api/owner/trusts` | owner: trusts list / naya trust |
 
 ## Admin panel (Phase 2) — kya port ho chuka hai
@@ -181,7 +185,7 @@ Purane `mgsf_web_panel` ke screens yahan copy hain. Firebase ki jagah ab `src/li
 | Agents page + agent details (members, pay status, rasid, all-pay-status PDF, transactions) | ✅ |
 | Payments (transactions) page, Closing Payments page | ✅ |
 | Owner page (trusts list, enable/disable) | ✅ |
-| Mobile app (Expo) | ⏳ Phase 3 |
+| Mobile app (Expo) — agent + member, alag repo `mgsf_mobile` | ✅ (neeche "Mobile app" dekhein) |
 
 "Create Payment Entry" (purana GenerateRasidEntry) ki ab zaroorat nahi: closing record hote hi server entries bana deta hai.
 
@@ -335,10 +339,56 @@ Iske liye kya badla:
 - Transactions ek hi request mein aate hain (max 50,000 per range; isse zyada ho toh page chhoti range chunne ko bolta hai).
 - Server pe `Caddyfile` gzip/zstd compression chalu karta hai, isse badi lists 5–8 guna chhoti ho jaati hain.
 
+## Mobile app (agent + member) — naye features
+
+App: alag repo **`mgsf_mobile`** (Expo). Server ki saari app API `src/app/api/app/*` mein, logic `src/services/mobileApp.js`.
+Har feature ko developer **`/feature-control` → "Mobile app"** group se trust-wise band / chalu kar sakta hai.
+
+| Feature | Admin panel mein kahan | App mein | Feature control switch |
+|---|---|---|---|
+| App ki settings — maintenance, naya / zaroori update, sampark, "trust ke baare mein" | Settings → **Mobile App** | maintenance screen, update banner, Settings | `mobileApp` |
+| **App se bhugtan** — UPI QR (raashi ke saath), UPI ID, bank khata, trust ka apna QR, steps, WhatsApp suchna | Settings → Mobile App → "App se bhugtan" | member: "भुगतान करें" + Pay tab · agent: "ट्रस्ट को जमा" | `appPayment` |
+| **Push notification (Expo, free)** — panel se bhejna: sab / members / agents / bakaya wale (raashi apne aap) / chune hue; history + kitno ne padhi | Settings → **Notifications** | phone tray + "सूचनाएँ" list, tap → sahi screen | `appNotifications` |
+| Apne aap jaane wali suchna — bhugtan jama, nayi closing (member: apni raashi + antim tithi, agent: kul vasooli) | Settings → Notifications → "Apne aap jaane wali" (har ek band ho sakti hai) | — | `appNotifications` |
+| **App logins** — kitne member / agent ne login kiya, kis phone par (model, Android, app version, aakhri baar), notification chalu?, ek phone / sab phone se logout | Settings → **App logins** | logout hote hi app login screen par | `appLogins` |
+| Member / agent login app mein | — | band = login screen par wo tab hi nahi dikhta | `memberLogin`, `agentLogin` |
+| Parivaar (ek mobile number) — sab sadasya ek saath, suchna parivaar ke phone par bhi | — | member home "मेरा परिवार" | — |
+| Varisdar ka Aadhaar no. + Aadhaar aage / peeche photo | Add / Edit member (pehle se) | agent request form + member ka khata → विवरण → दस्तावेज़ | — |
+| Trust ka logo / rang app mein | Settings → Organization / **Theme** (ab 17 theme) | login, loading, settings — logo na mile to trust ke rang ka badge | `theme` |
+| Telephone test — "टेस्ट नोटिफिकेशन भेजें" (kahan atka: token / Expo / FCM key) | — | App → Settings → सूचनाएँ | — |
+
+Notification: server par Firebase **nahi** chahiye (sirf Expo ko bhejta hai). Android app ke build mein ek baar
+`google-services.json` aur Expo par FCM V1 key — sab trust ke liye ek hi Firebase project (`mgsf_mobile/trusts/README.md`).
+
+Ek hi app code se har trust ka alag app (naam, package, server, icon): `mgsf_mobile/trusts/<naam>.json` +
+`eas build --profile <naam>-apk`. Naya server ek command se: `DEPLOY-NEW-SERVER.md` (`scripts/server-setup.sh`),
+saare server ek saath update: `scripts/deploy-all.ps1`.
+
+## WhatsApp (Gupshup) — join / baki / jama message + inbox
+
+Har trust apna Gupshup app jodta hai (**Settings → WhatsApp**). Feature-control switch: `whatsappApi`. Poora setup: [WHATSAPP-GUPSHUP.md](WHATSAPP-GUPSHUP.md).
+
+- 3 automatic message, har ek ka apna **Template ID** + template text. Har `{{n}}` ke liye variable chunte hain (`{name}`, `{regNo}`, `{pendingAmount}`, `{lastDate}`, `{paidAmount}` …).
+  1. member accept → certificate PDF
+  2. nayi closing / bulk button → baki rasid PDF
+  3. payment → us payment ki jama rasid PDF
+- PDF ka signed public link: `/api/wa/file/<token>/<naam>.pdf` (30 din). Gupshup ise download karta hai.
+- Callback URL (sab trust ka ek): `/api/whatsapp/callback`. Trust ki pehchaan key header `x-webhook-key` se hoti hai (optional), ya Gupshup payload ke `app` = trust ka app name. Purane `/callback/<trustId>` aur `/callback/<trustId>/<key>` bhi chalte hain.
+- **Settings → WhatsApp inbox**: baatcheet. Reply sirf member ke aakhri message ke 24 ghante andar.
+- Table `whatsapp_messages` (migration 0011). Code: `src/services/whatsapp.js`, `src/lib/gupshup.js`, `src/lib/whatsappSettings.js`. Tests: `tests/whatsapp.test.js`.
+
+| API | Kya |
+|---|---|
+| `GET/PUT /api/whatsapp/settings` | Gupshup + templates (API key wapas nahi aati) + callback URL |
+| `POST /api/whatsapp/test` | `{ event, phone }` test message |
+| `GET/POST /api/whatsapp/send` | baki walon ki ginti / bulk bhejna |
+| `GET /api/whatsapp/log` | bheje gaye message + status |
+| `GET /api/whatsapp/inbox`, `GET/POST /api/whatsapp/inbox/:phone` | inbox, baatcheet, reply |
+
 ## Aage ka kaam (phases)
 
 - [x] **Phase 1:** database, business logic, API, Firestore migration, Docker deploy, tests
 - [x] **Phase 2: Web panel** (upar wali table dekhein) — saare screens port ho gaye, Firebase import zero. `mgsf_web_panel` ke screens yahan `src/app` mein laana. UI (antd, PDFs) waisa hi rahega, sirf Firebase calls ki jagah `client/mgsfApi.js`. Order: login → members → closing → payments → transactions → agent report/PDFs → settings.
-- [ ] **Phase 3: Mobile app.** `mgsf_app` mein `firebaseConfig.js` hata kar `createApi({ baseUrl, getToken })`. Expo push token `/api/auth/me` pe save hoga.
+- [x] **Phase 3: Mobile app.** Naya Expo app `mgsf_mobile` (agent + member) — `/api/app/*` API, Expo push. Neeche "Mobile app" dekhein.
 - [ ] **Phase 4: Go-live.** Purana panel 1 din ke liye band → final `migrate:firestore --fresh` → naya live → 1–2 hafte Firebase read-only rakh kar band.
 - [ ] Files ko Firebase Storage se R2 pe copy karne ki script; PDF / email / certificate routes.
