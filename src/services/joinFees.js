@@ -26,6 +26,22 @@ export async function listJoinFeePayments(memberId) {
   return camel(rows);
 }
 
+/** One instalment inside the caller's transaction (no commission — call accrueJoinFeesFor with the ids). → id */
+export async function joinFeeTx(tx, programId, memberId, amount, meta = {}, auth) {
+  const mode = String(meta.paymentMode || "cash");
+  const day = fmtISO(toDate(meta.paymentDate) || todayIST());
+  const { rows: [m] } = await tx.execute(sql`SELECT id, program_id FROM members WHERE id = ${memberId} FOR UPDATE`);
+  if (!m || m.program_id !== programId) throw notFound(`Member ${memberId} not found in this program`);
+  const { rows: [jp] } = await tx.execute(sql`
+    INSERT INTO join_fee_payments (id, program_id, member_id, amount, payment_mode, transaction_ref, payment_date, note,
+      agent_id, created_by_id, created_by_name)
+    VALUES (gen_random_uuid()::text, ${programId}, ${memberId}, ${amount}, ${mode}, ${meta.transactionId || ""},
+      ${day}::date, ${meta.note || ""}, ${meta.agentId || null}, ${auth?.accountId || ""}, ${meta.createdByName || auth?.displayName || ""})
+    RETURNING id`);
+  await recalc(tx, memberId, { lastRef: meta.transactionId || null, lastMode: mode === "cash" ? "cash" : "online" });
+  return jp.id;
+}
+
 /**
  * Record instalments for one or more members.
  * items: [{ memberId, amount }], meta: { paymentMode, transactionId, note, paymentDate, agentId, createdByName }
@@ -39,17 +55,8 @@ export async function addJoinFeePayments(programId, items, meta = {}, auth) {
     let total = 0;
     const ids = [];
     for (const it of list) {
-      const { rows: [m] } = await tx.execute(sql`SELECT id, program_id FROM members WHERE id = ${it.memberId} FOR UPDATE`);
-      if (!m || m.program_id !== programId) throw notFound(`Member ${it.memberId} not found in this program`);
       const amount = Math.round(Number(it.amount));
-      const { rows: [jp] } = await tx.execute(sql`
-        INSERT INTO join_fee_payments (id, program_id, member_id, amount, payment_mode, transaction_ref, payment_date, note,
-          agent_id, created_by_id, created_by_name)
-        VALUES (gen_random_uuid()::text, ${programId}, ${it.memberId}, ${amount}, ${mode}, ${meta.transactionId || ""},
-          ${day}::date, ${meta.note || ""}, ${meta.agentId || null}, ${auth?.accountId || ""}, ${meta.createdByName || auth?.displayName || ""})
-        RETURNING id`);
-      ids.push(jp.id);
-      await recalc(tx, it.memberId, { lastRef: meta.transactionId || null, lastMode: mode === "cash" ? "cash" : "online" });
+      ids.push(await joinFeeTx(tx, programId, it.memberId, amount, { ...meta, paymentMode: mode, paymentDate: day }, auth));
       total += amount;
     }
     // agent commission (member's agent, if join-fees commission is on for him)

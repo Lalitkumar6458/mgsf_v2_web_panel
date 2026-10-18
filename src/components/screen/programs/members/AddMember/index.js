@@ -3,6 +3,7 @@
 import { FiUserPlus } from 'react-icons/fi';
 import DuplicateWarning from '@/components/common/DuplicateWarning';
 import WhatsAppJoinTick from '@/components/common/WhatsAppJoinTick';
+import { FixedLimitField } from '@/components/common/fixedLimit/FixedLimit';
 import React, { useState, useEffect } from 'react';
 import { Button, Drawer, Select, Form, Input, DatePicker, Upload, Card, Row, Col, Divider, Space, Typography, App, Spin, Checkbox, Modal, AutoComplete } from 'antd';
 import {
@@ -696,6 +697,7 @@ const checkApplicationNumberDuplicate = async (appNumber, programId) => {
         locationGroup: selectedLocationGroup?.location || '',
         locactionGroupId: selectedLocationGroup?.id || '',
         payAmount: effectivePay,
+        ...(values.fixedLimit ? { fixedLimit: values.fixedLimit } : {}), // fixed rakam (kul seema)
         joinFees: joinFees,
         joinFeesDone: values?.joinFeesDone || false,
         joinFeesTxtId: values?.joinFeesTxtId || "",
@@ -1226,6 +1228,7 @@ const checkApplicationNumberDuplicate = async (appNumber, programId) => {
                       />
                     </Form.Item>
                   </Col>
+                  <FixedLimitField payAmount={effectivePay} />
                   <Col xs={24} sm={12} lg={8}>
                     <Form.Item label="नामांकन शुल्क">
                       <Input

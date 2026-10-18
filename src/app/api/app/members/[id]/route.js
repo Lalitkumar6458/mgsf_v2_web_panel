@@ -6,5 +6,8 @@ import { memberFor, memberDetail } from "@/services/mobileApp.js";
 export const dynamic = "force-dynamic";
 export const GET = route(async ({ auth, params }) => {
   const m = await memberFor(auth, params.id);
-  return memberDetail(m.id, m);
+  const d = await memberDetail(m.id, m);
+  if (auth.features?.fixedLimit === false) d.fixedLimit = null;
+  if (auth.features?.advancePayment === false) d.advance = 0;
+  return d;
 });

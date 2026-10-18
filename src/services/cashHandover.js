@@ -2,6 +2,7 @@
 // he has handed over to the trust; the difference is what he still holds.
 //
 //   collected = closing payments (transactions, cash, not reversed) + join-fee instalments (cash)
+//               + advance (अग्रिम) deposits in cash (paying closings FROM advance is not new cash)
 //               entered from the agent's own login
 //   handed    = rows of cash_handovers (entered by the office when the agent deposits)
 //   balance   = collected − handed   (all time — the balance carries over day to day)
@@ -30,6 +31,12 @@ function collectedRows(programId, { agentId, from, to } = {}) {
       FROM join_fee_payments j
       WHERE j.program_id = ${programId} AND j.payment_mode = 'cash'
         ${from ? sql`AND j.payment_date >= ${from}::date` : sql``} ${to ? sql`AND j.payment_date <= ${to}::date` : sql``}
+      UNION ALL
+      -- advance (अग्रिम) taken in cash by the agent
+      SELECT v.created_by_id, v.payment_date, v.amount, 1, 0
+      FROM member_advances v
+      WHERE v.program_id = ${programId} AND v.kind = 'deposit' AND v.method = 'cash' AND v.status = 'completed'
+        ${from ? sql`AND v.payment_date >= ${from}::date` : sql``} ${to ? sql`AND v.payment_date <= ${to}::date` : sql``}
     ) x JOIN aa ON aa.account_id = x.account_id
     ${agentId ? sql`WHERE aa.agent_id = ${agentId}` : sql``}
     GROUP BY aa.agent_id, x.day`;

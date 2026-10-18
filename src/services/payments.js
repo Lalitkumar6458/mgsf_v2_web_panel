@@ -8,7 +8,8 @@ import { badRequest, conflict, notFound } from "../lib/errors.js";
 import { toDate, todayIST, fmtISO } from "../lib/dates.js";
 import { camel } from "../lib/case.js";
 import { accrueClosingFor, cancelCommissions } from "./commissions.js";
-import { dueStillOwed } from "./closings.js";
+import { dueStillOwed, lockProgram, refreshLimited } from "./closings.js";
+import { advanceBalance, advanceBalances as advanceBalance_, useAdvanceTx, returnAdvanceTx } from "./advances.js";
 
 /** Rupees are whole numbers (dues / transactions are integers): "120" ok, 100.5 / "abc" refused. */
 function wholeRupees(v, what = "Amount") {
@@ -31,7 +32,7 @@ function commonMeta(body) {
   return { paymentMethod, paymentDate, note: String(body.note || ""), onlineReference };
 }
 
-async function assertNewReference(tx, programId, ref) {
+export async function assertNewReference(tx, programId, ref) {
   if (!ref) return;
   const { rows } = await tx.execute(sql`
     SELECT 1 FROM transactions WHERE program_id = ${programId} AND online_reference = ${ref} AND status = 'completed' LIMIT 1`);
@@ -39,7 +40,7 @@ async function assertNewReference(tx, programId, ref) {
 }
 
 /** Lock open dues. where = SQL condition on alias d. */
-async function lockOpenDues(tx, programId, where) {
+export async function lockOpenDues(tx, programId, where) {
   const { rows } = await tx.execute(sql`
     SELECT d.*, c.closing_date
     FROM dues d JOIN members c ON c.id = d.closing_member_id
@@ -49,16 +50,51 @@ async function lockOpenDues(tx, programId, where) {
   return rows;
 }
 
-/** Write transactions + update dues. items: [{ due, pay }] */
-async function writePayments(tx, programId, items, meta, auth, mode = "") {
+/**
+ * "Advance se kaatein": split each item into an advance part (method 'advance') and the rest (the
+ * chosen method), oldest closing first. items: [{ due, pay }] → [{ due, pay, method? }]
+ */
+function splitAdvance(items, advance) {
+  let left = advance;
+  const out = [];
+  for (const it of items) {
+    const a = Math.min(left, it.pay);
+    if (a > 0) out.push({ due: it.due, pay: a, method: "advance" });
+    if (it.pay - a > 0) out.push({ due: it.due, pay: it.pay - a });
+    left -= a;
+  }
+  return out;
+}
+
+/** How much advance to take: true = as much as possible, a number = that much (never more than balance / total). */
+async function advancePart(tx, body, memberId, total) {
+  const want = body.useAdvance;
+  if (!want) return 0;
+  const bal = await advanceBalance(memberId, tx);
+  if (want === true || want === "all" || want === "true") return Math.min(bal, total);
+  const n = wholeRupees(want, "Advance rakam");
+  if (n > bal) throw conflict(`Advance mein sirf ₹${bal} hai`);
+  return Math.min(n, total);
+}
+
+/** Write transactions + update dues. items: [{ due, pay, method? }] */
+export async function writePayments(tx, programId, items, meta, auth, mode = "") {
   const ts = Date.now();
   const code = batchCode();
   const batchId = `BATCH-${code}`;
   let seq = 0, total = 0, fully = 0;
   const txIds = [];
+  const advUsed = new Map(); // payer → ₹ taken from advance
+  const byPayer = new Map(); // payer → { paid, closings:Set }
 
-  for (const { due, pay } of items) {
+  for (const it of items) {
+    const { pay } = it;
     if (pay <= 0) continue;
+    // the same due may come twice (advance part + rest): read its paid amount fresh
+    const due = { ...it.due, paid_amount: (await tx.execute(sql`SELECT paid_amount FROM dues WHERE id = ${it.due.id}`)).rows[0].paid_amount };
+    const method = it.method || meta.paymentMethod;
+    const ref = method === "advance" ? "" : meta.onlineReference;
+    if (method === "advance") advUsed.set(due.payer_member_id, (advUsed.get(due.payer_member_id) || 0) + pay);
     seq++;
     const newPaid = due.paid_amount + pay;
     const isFull = newPaid >= due.amount;
@@ -68,21 +104,28 @@ async function writePayments(tx, programId, items, meta, auth, mode = "") {
         closing_member_id, due_id, amount, is_full_payment, payment_method, payment_date, note, online_reference,
         bulk_payment_mode, created_by_id)
       VALUES (gen_random_uuid()::text, ${programId}, ${txNumber}, ${batchId}, ${seq}, ${due.payer_member_id},
-        ${due.closing_member_id}, ${due.id}, ${pay}, ${isFull}, ${meta.paymentMethod}, ${meta.paymentDate}::date,
-        ${meta.note}, ${meta.onlineReference}, ${mode}, ${auth?.accountId || ""})
+        ${due.closing_member_id}, ${due.id}, ${pay}, ${isFull}, ${method}, ${meta.paymentDate}::date,
+        ${meta.note}, ${ref}, ${mode}, ${auth?.accountId || ""})
       RETURNING id`);
     await tx.execute(sql`
       UPDATE dues SET paid_amount = ${newPaid}, status = ${isFull ? "paid" : "partial"}, paid_at = now(),
         paid_date = ${isFull ? meta.paymentDate : null}::date,
-        payment_method = ${meta.paymentMethod}, online_reference = ${meta.onlineReference}, updated_at = now()
+        payment_method = ${method}, online_reference = ${ref}, updated_at = now()
       WHERE id = ${due.id}`);
     txIds.push(t.id);
     total += pay;
+    const bp = byPayer.get(due.payer_member_id) || { paid: 0, closings: new Set() };
+    bp.paid += pay; bp.closings.add(due.id);
+    byPayer.set(due.payer_member_id, bp);
     if (isFull) fully++;
   }
+  // advance spent: one "use" entry per payer for this batch
+  for (const [memberId, amount] of advUsed) await useAdvanceTx(tx, { programId, memberId, amount, batchId, paymentDate: meta.paymentDate, auth });
   // agent commission on these payments (agent of the payer, if commission is on for him)
   await accrueClosingFor(tx, txIds);
-  return { batchId, processed: txIds.length, totalPaid: total, fullyPaid: fully, transactionIds: txIds };
+  const fromAdvance = [...advUsed.values()].reduce((a, b) => a + b, 0);
+  const perMember = [...byPayer.entries()].map(([memberId, v]) => ({ memberId, paid: v.paid, closings: v.closings.size, fromAdvance: advUsed.get(memberId) || 0 }));
+  return { batchId, processed: new Set(items.filter((i) => i.pay > 0).map((i) => i.due.id)).size, totalPaid: total, fullyPaid: fully, transactionIds: txIds, fromAdvance, perMember };
 }
 
 /**
@@ -96,8 +139,11 @@ export async function paySingle(body, auth) {
   const dueIds = body.dueIds || [];
   if (!programId || !payerId || (!closingIds.length && !dueIds.length)) throw badRequest("programId, payerId and closingIds/dueIds required");
   const meta = commonMeta(body);
+  if (body.useAdvance && auth?.features?.advancePayment === false) throw badRequest("Advance payment is panel mein chalu nahi hai");
 
   return db.transaction(async (tx) => {
+    // advance: lock the payer first (member → dues, same order as closings) so it is spent only once
+    if (body.useAdvance) await tx.execute(sql`SELECT id FROM members WHERE id = ${payerId} FOR UPDATE`);
     await assertNewReference(tx, programId, meta.onlineReference);
     const where = dueIds.length
       ? sql`d.payer_member_id = ${payerId} AND d.id IN (${sql.join(dueIds.map((x) => sql`${x}`), sql`, `)})`
@@ -117,7 +163,8 @@ export async function paySingle(body, auth) {
       items.push({ due, pay });
       remaining -= pay;
     }
-    const r = await writePayments(tx, programId, items, meta, auth, "");
+    const adv = await advancePart(tx, body, payerId, items.reduce((a, i) => a + i.pay, 0));
+    const r = await writePayments(tx, programId, adv ? splitAdvance(items, adv) : items, meta, auth, "");
     return { success: true, ...r, remaining: outstanding - r.totalPaid, skipped: closingIds.length + dueIds.length - open.length };
   });
 }
@@ -135,8 +182,12 @@ export async function payBulk(body, auth) {
   if (!isCustom && !(Number(globalAmount) > 0)) throw badRequest("Either memberClosingSelections or globalAmount required");
   if (!isCustom) wholeRupees(globalAmount);
   const meta = commonMeta(body);
+  if (body.useAdvance && auth?.features?.advancePayment === false) throw badRequest("Advance payment is panel mein chalu nahi hai");
 
   return db.transaction(async (tx) => {
+    if (body.useAdvance) {
+      await tx.execute(sql`SELECT id FROM members WHERE id IN (${sql.join(memberIds.map((x) => sql`${x}`), sql`, `)}) ORDER BY id FOR UPDATE`);
+    }
     await assertNewReference(tx, programId, meta.onlineReference);
     const open = await lockOpenDues(tx, programId, sql`d.payer_member_id IN (${sql.join(memberIds.map((x) => sql`${x}`), sql`, `)})`);
     const byMember = new Map();
@@ -168,7 +219,18 @@ export async function payBulk(body, auth) {
     }
     if (!items.length) throw badRequest("No valid pending closings found to process");
 
-    const r = await writePayments(tx, programId, items, meta, auth, isCustom ? "custom_selection" : "waterfall");
+    // "advance se kaatein" in bulk: each member's own advance pays his own closings first
+    let final = items;
+    if (body.useAdvance) {
+      final = [];
+      for (const memberId of memberIds) {
+        const mine = items.filter((i) => i.due.payer_member_id === memberId);
+        if (!mine.length) continue;
+        const adv = await advancePart(tx, { useAdvance: true }, memberId, mine.reduce((a, i) => a + i.pay, 0));
+        final.push(...(adv ? splitAdvance(mine, adv) : mine));
+      }
+    }
+    const r = await writePayments(tx, programId, final, meta, auth, isCustom ? "custom_selection" : "waterfall");
     return {
       success: true,
       mode: isCustom ? "custom_selection" : "waterfall",
@@ -177,13 +239,49 @@ export async function payBulk(body, auth) {
       totalPaid: r.totalPaid,
       remaining: isCustom ? 0 : Number(globalAmount) - r.totalPaid,
       batchId: r.batchId,
+      fromAdvance: r.fromAdvance,
+      perMember: r.perMember,
     };
   });
+}
+
+/**
+ * For the bulk payment screen: every open due of these members (one query) + each one's advance.
+ * → { members: { [memberId]: { advance, dues: [{ id, closingMemberId, closingName, closingRegNo, closingDate, closingGroupId, amount, paidAmount, remaining, dueDate, status }] } } }
+ */
+export async function openDuesFor(programId, memberIds) {
+  const ids = [...new Set((memberIds || []).filter(Boolean))].slice(0, 2000);
+  const out = Object.fromEntries(ids.map((id) => [id, { advance: 0, dues: [] }]));
+  if (!ids.length) return { members: out };
+  const list = sql.join(ids.map((x) => sql`${x}`), sql`, `);
+  const { rows } = await db.execute(sql`
+    SELECT d.id, d.payer_member_id, d.closing_member_id, d.amount, d.paid_amount, d.due_date, d.status::text AS status,
+           c.display_name AS closing_name, c.registration_number AS closing_reg_no, c.closing_date, c.closing_group_id, c.village AS closing_village
+    FROM dues d JOIN members c ON c.id = d.closing_member_id
+    WHERE d.program_id = ${programId} AND d.payer_member_id IN (${list}) AND d.status <> 'paid' AND d.amount > d.paid_amount
+    ORDER BY c.closing_date, d.created_at`);
+  for (const r of rows) {
+    out[r.payer_member_id]?.dues.push({
+      id: r.id, closingMemberId: r.closing_member_id, closingName: r.closing_name, closingRegNo: r.closing_reg_no || "",
+      closingVillage: r.closing_village || "", closingDate: r.closing_date, closingGroupId: r.closing_group_id,
+      amount: r.amount, paidAmount: r.paid_amount, remaining: r.amount - r.paid_amount, dueDate: r.due_date, status: r.status,
+    });
+  }
+  const bal = await advanceBalance_(ids);
+  for (const [id, b] of bal) if (out[id]) out[id].advance = b;
+  // fixed rakam (seema): limit + paid so far (screen shows "₹15,200 mein se ₹X bhara")
+  const { rows: lim } = await db.execute(sql`
+    SELECT m.id, m.fixed_limit, COALESCE((SELECT sum(paid_amount) FROM dues WHERE payer_member_id = m.id), 0)::int AS paid
+    FROM members m WHERE m.id IN (${list}) AND m.fixed_limit IS NOT NULL`);
+  for (const r of lim) if (out[r.id]) Object.assign(out[r.id], { fixedLimit: r.fixed_limit, paidTotal: r.paid });
+  return { members: out };
 }
 
 /** Undo one transaction (wrong entry): marks it reversed and gives the amount back to the due. */
 export async function reverseTransaction(transactionId, { reason = "" } = {}, auth) {
   return db.transaction(async (tx) => {
+    const { rows: [pre] } = await tx.execute(sql`SELECT program_id FROM transactions WHERE id = ${transactionId}`);
+    if (pre) await lockProgram(tx, pre.program_id); // program first (same lock order as closings / members)
     const { rows: [t] } = await tx.execute(sql`SELECT * FROM transactions WHERE id = ${transactionId} FOR UPDATE`);
     if (!t) throw notFound("Transaction not found");
     if (t.status !== "completed") throw conflict("Transaction is already reversed");
@@ -207,6 +305,9 @@ export async function reverseTransaction(transactionId, { reason = "" } = {}, au
         await tx.execute(sql`DELETE FROM dues WHERE id = ${t.due_id}`);
       }
     }
+    // paid from advance → the money goes back to the member's advance
+    if (t.payment_method === "advance") await returnAdvanceTx(tx, t, auth);
+    await refreshLimited(tx, t.payer_member_id); // fixed limit: money out → his dues share the limit again
     const commission = await cancelCommissions(tx, "closing", sql`c.source_id = ${t.id}`, reason ? `Payment reversed: ${reason}` : "Payment reversed");
     return { success: true, transactionId: t.id, amount: t.amount, commission };
   });

@@ -48,6 +48,8 @@ export const EXTRA_FEATURES = [
   { group: "members", key: "countDisplay", label: "Member count display", hi: "सदस्य संख्या", desc: "Yojna mein percent / fixed count dikhane ka option" },
   // hisaab + suraksha
   { group: "money", key: "cashHandover", label: "Agent cash hisaab", hi: "एजेंट नकद हिसाब", desc: "Agent ne kitna cash liya, kitna jama kiya", api: [/^\/programs\/[^/]+\/cash-handovers/] },
+  { group: "money", key: "advancePayment", label: "Advance (अग्रिम) payment", hi: "अग्रिम भुगतान", desc: "Member ka advance jama karna, aur closing payment mein advance se kaatna (panel + agent app)", api: [/^\/members\/[^/]+\/advance/, /^\/advances\//, /^\/programs\/[^/]+\/advances/] },
+  { group: "money", key: "fixedLimit", label: "Fixed rakam (seema)", hi: "निश्चित राशि", desc: "Sadasya ki kul closing rakam ki seema (jaise ₹15,200) — utna bharne ke baad aage koi baki nahi; advance bhi utna hi", api: [/^\/programs\/[^/]+\/fixed-limit$/] },
   { group: "money", key: "auditLog", label: "Activity log", hi: "गतिविधि लॉग", desc: "Kisne kya badla — Settings → Activity log", api: [/^\/audit$/] },
   // sampark + look
   { group: "connect", key: "whatsapp", label: "WhatsApp reminder", hi: "व्हाट्सऐप", desc: "Baki payment / rasid link WhatsApp pe (bina kharche)" },
@@ -56,6 +58,8 @@ export const EXTRA_FEATURES = [
   { group: "connect", key: "theme", label: "Theme / colours", hi: "थीम", desc: "Settings → Theme se rang badalna", api: [/^\/trust\/theme$/], writeOnly: true },
   // mobile app (agent + member)
   { group: "app", key: "mobileApp", label: "Mobile app settings", hi: "मोबाइल ऐप", desc: "Settings → Mobile App: maintenance, update, app se bhugtan, sampark", api: [/^\/trust\/app-settings$/] },
+  { group: "app", key: "paymentRequests", label: "App payment requests (UTR + screenshot)", hi: "भुगतान अनुरोध", desc: "Member / agent trust ke QR par bhugtan karke app se UTR + screenshot bhejein; office jaanch kar 'Accept' kare to payment jama — Payments → App requests",
+    api: [/^\/payment-requests(\/|$)/, /^\/app\/payment-requests(\/|$)/] },
   { group: "app", key: "appNotifications", label: "App notification bhejna", hi: "ऐप सूचना", desc: "Settings → Notifications: member / agent phones par push (Expo, free) — auto: bhugtan, nayi closing",
     api: [/^\/notifications\/(send|audience|sent)$/] },
   { group: "app", key: "appLogins", label: "App logins (kaun, kitne phone)", hi: "ऐप लॉगिन", desc: "Settings → App logins: kitne member / agent ne app mein login kiya, kis phone par — aur phone se logout",
@@ -190,7 +194,7 @@ export const FEATURE_PRESETS = [
   { key: "basic", label: "Basic", desc: "Sirf members, yojna, payments, closing",
     off: ["reports", "commission", "users", "certificateBuilder", "theme", "receipts", "rasidDesign", "upiQr", "verifyQr", "paymentPdf", "exports",
       "emailSend", "countDisplay", "memberLogin", "cashHandover", "auditLog", "whatsapp", "duplicateCheck", "blankForm", "appPayment",
-      "appNotifications", "appLogins", "whatsappApi"] },
+      "appNotifications", "appLogins", "whatsappApi", "advancePayment", "fixedLimit", "paymentRequests"] },
 ];
 
 export function presetFlags(presetKey) {

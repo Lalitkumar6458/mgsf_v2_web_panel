@@ -10,7 +10,9 @@ import { useEffect, useState, useMemo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchAllMembers, fetchClosingGroups as loadClosingGroups } from '@/lib/services/firebaseService';
 import { api } from '@/lib/client/api';
-import { useAuth } from '@/lib/AuthProvider';
+import { useAuth, useFeature } from '@/lib/AuthProvider';
+import AdvanceModal from '@/components/common/advance/AdvanceModal';
+import { FixedLimitTag, useFixedLimitOn } from '@/components/common/fixedLimit/FixedLimit';
 import {
   DollarOutlined,
   UserOutlined,
@@ -117,6 +119,14 @@ const AddPaymentModal = () => {
   /* ── Status tab + Closing Group filter ── */
   const [activeStatusTab, setActiveStatusTab]           = useState('pending');
   const [selectedClosingGroup, setSelectedClosingGroup] = useState(null);
+  // advance (अग्रिम) of the selected member — "Advance se kaatein"
+  const featureOn = useFeature();
+  const advanceOn = featureOn('advancePayment');
+  const [advance, setAdvance] = useState(0);
+  const [limit, setLimit] = useState(null); // fixed rakam { limit, paid }
+  const limitOn = useFixedLimitOn();
+  const [useAdv, setUseAdv] = useState(false);
+  const [advOpen, setAdvOpen] = useState(false);
 
   /* ─────────────────────────────────────────── */
   const showDrawer = () => { setIsDrawerVisible(true); setCurrentStep(0); };
@@ -164,7 +174,10 @@ const AddPaymentModal = () => {
     if (!memberId || !selectedProgram || !user) return;
     try {
       // what this member owes / has paid — one call
-      const { dues } = await api.get(`/members/${memberId}/dues`);
+      const { dues, summary } = await api.get(`/members/${memberId}/dues`);
+      setAdvance(summary?.advance || 0);
+      setLimit(summary?.fixedLimit != null ? { limit: summary.fixedLimit, paid: summary.paidAmount || 0 } : null);
+      setUseAdv((summary?.advance || 0) > 0);
       const pendingEntries = dues
         .filter((d) => d.status !== 'paid')
         .map((d) => ({ id: d.id, memberId, closingMemberId: d.closingMemberId, status: 'pending', payAmount: d.amount - d.paidAmount }));
@@ -233,12 +246,13 @@ const AddPaymentModal = () => {
         paymentDate: dayjs(values.paymentDate).format('YYYY-MM-DD'),
         note: values.note || '',
         onlineReference: values.paymentMethod === 'online' ? values.onlineReference : '',
+        ...(advanceOn && useAdv && advance > 0 ? { useAdvance: true } : {}),
       });
       if (r.skipped > 0) {
         message.warning(`${r.skipped} selected closing(s) are not owed by this member and were skipped. Add them via Members → Payment Details → Correct Payments if needed.`, 6);
       }
-      setPaymentSummary({ count: r.processed, amount: r.totalPaid, method: values.paymentMethod, reference: values.onlineReference });
-      message.success({ content: <div><div className="font-medium">Payment Successful!</div><div className="text-xs">Processed {r.processed} payment(s) of ₹{r.totalPaid}</div></div>, duration: 3 });
+      setPaymentSummary({ count: r.processed, amount: r.totalPaid, method: values.paymentMethod, reference: values.onlineReference, fromAdvance: r.fromAdvance || 0 });
+      message.success({ content: <div><div className="font-medium">Payment Successful!</div><div className="text-xs">Processed {r.processed} payment(s) of ₹{r.totalPaid}{r.fromAdvance ? ` (advance se ₹${r.fromAdvance})` : ''}</div></div>, duration: 3 });
       setTimeout(handleCloseDrawer, 2000);
     } catch (e) {
       console.error(e);
@@ -270,8 +284,9 @@ const AddPaymentModal = () => {
   const getmemberData = async () => {
     setFetchingMembers(true);
     try {
-      const data = (await fetchAllMembers(selectedProgram.id, { status: 'accepted' }))
-        .filter((m) => m.active_flag && !m.delete_flag);
+      // active members + closed / blocked ones who still owe (they can still pay their old closings)
+      const data = (await fetchAllMembers(selectedProgram.id, {}))
+        .filter((m) => !m.delete_flag && ['accepted', 'closed', 'blocked'].includes(m.status) && (m.active_flag || (m.openDues || 0) > 0));
       setMembers(data);
     } catch (e) {
       console.error(e);
@@ -423,6 +438,12 @@ const AddPaymentModal = () => {
   }, [selectedMarriages, paymentPendingEntries, selectedMember, alreadyPaidMarriages, filteredMarriages]);
 
   const memberDetails = members.find((m) => m.id === selectedMember) || null;
+  // what the server will actually take: the open amount of the selected closings
+  const owed = paymentPendingEntries
+    .filter((p) => p.memberId === selectedMember && selectedMarriages.includes(p.closingMemberId) && !alreadyPaidMarriages.includes(p.closingMemberId))
+    .reduce((a, p) => a + (p.payAmount || 0), 0);
+  const fromAdv = advanceOn && useAdv ? Math.min(advance, owed) : 0;
+  const toCollect = Math.max(owed - fromAdv, 0);
 
   /* ─────────────────────────────────────────────
      STEP 0 — Program Selection
@@ -896,6 +917,32 @@ const AddPaymentModal = () => {
           </Form.Item>
         )}
 
+        {limitOn && memberDetails && limit ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '4px 0 10px', fontSize: 12, color: '#475569' }}>
+            <FixedLimitTag limit={limit.limit} paid={limit.paid} />
+            <span>Is sadasya ki kul fixed rakam {`₹${limit.limit.toLocaleString('en-IN')}`} — closing payment isse zyada nahi banega</span>
+          </div>
+        ) : null}
+        {advanceOn && memberDetails ? (
+          <div className={`pmAdvance ${advance > 0 ? 'pmAdvanceHas' : ''}`}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <WalletOutlined style={{ fontSize: 20, color: advance > 0 ? '#059669' : '#9ca3af' }} />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 12, color: '#6b7280', fontWeight: 600 }}>Advance (अग्रिम) jama</div>
+                <div style={{ fontSize: 20, fontWeight: 800, color: advance > 0 ? '#047857' : '#6b7280' }}>₹{advance.toLocaleString('en-IN')}</div>
+              </div>
+              <Button size="small" icon={<PlusOutlined />} onClick={() => setAdvOpen(true)}>Advance jama / hisaab</Button>
+            </div>
+            {advance > 0 ? (
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, cursor: 'pointer' }}>
+                <input type="checkbox" checked={useAdv} onChange={(e) => setUseAdv(e.target.checked)} style={{ width: 18, height: 18, accentColor: '#059669' }} />
+                <span style={{ fontWeight: 600 }}>Advance se kaatein</span>
+                {useAdv ? <span style={{ marginLeft: 'auto', fontSize: 12, color: '#047857' }}>₹{fromAdv.toLocaleString('en-IN')} advance se · bachega ₹{(advance - fromAdv).toLocaleString('en-IN')}</span> : null}
+              </label>
+            ) : null}
+          </div>
+        ) : null}
+
         <Form.Item name="note" label={<span className="pmLabel">Note (Optional)</span>}>
           <TextArea rows={2} placeholder="Add any notes…" maxLength={200} showCount size="large" />
         </Form.Item>
@@ -923,10 +970,20 @@ const AddPaymentModal = () => {
                 : <><CreditCardOutlined style={{ color: '#3b82f6' }} /> Online Transfer</>}
             </span>
           </div>
+          <div className="pmSummaryRow">
+            <span>Baki rakam (chuni closing)</span>
+            <span>₹{owed.toLocaleString('en-IN')}</span>
+          </div>
+          {fromAdv > 0 ? (
+            <div className="pmSummaryRow" style={{ color: '#047857' }}>
+              <span>Advance se kata</span>
+              <span>− ₹{fromAdv.toLocaleString('en-IN')}</span>
+            </div>
+          ) : null}
           <div className="pmSummaryDivider" />
           <div className="pmSummaryTotal">
-            <span>Total Payable</span>
-            <span>₹{stats.totalAmount.toLocaleString('en-IN')}</span>
+            <span>{fromAdv > 0 ? 'Abhi lena hai' : 'Total Payable'}</span>
+            <span>₹{(fromAdv > 0 || owed ? toCollect : stats.totalAmount).toLocaleString('en-IN')}</span>
           </div>
         </div>
       </div>
@@ -1013,7 +1070,7 @@ const AddPaymentModal = () => {
                   size="large"
                   className="pmConfirmBtn"
                 >
-                  Confirm Payment · ₹{stats.totalAmount.toLocaleString('en-IN')}
+                  {fromAdv > 0 ? (toCollect > 0 ? `Confirm · ₹${toCollect.toLocaleString('en-IN')} lena + ₹${fromAdv.toLocaleString('en-IN')} advance` : `Confirm · poora advance se (₹${fromAdv.toLocaleString('en-IN')})`) : `Confirm Payment · ₹${(owed || stats.totalAmount).toLocaleString('en-IN')}`}
                 </Button>
               )}
             </div>
@@ -1058,6 +1115,8 @@ const AddPaymentModal = () => {
             </div>
           </div>
         )}
+              <AdvanceModal open={advOpen} member={memberDetails ? { id: memberDetails.id, displayName: memberDetails.displayName, registrationNumber: memberDetails.registrationNumber } : null}
+          onClose={() => setAdvOpen(false)} onChanged={(b) => { setAdvance(b); setUseAdv(b > 0); }} />
       </Drawer>
 
       {/* ── All styles ── */}
@@ -1211,6 +1270,8 @@ const AddPaymentModal = () => {
         .pmSteps .ant-steps-item-title { font-size:11px !important; }
         .pmFooterActions     { display:flex;gap:8px; }
         .pmBackBtn           { border-radius:10px !important; }
+        .pmAdvance           { border:1px dashed #d1d5db;border-radius:12px;padding:12px 14px;margin-bottom:14px;background:#fff; }
+        .pmAdvanceHas        { border:1px solid #a7f3d0;background:#ecfdf5; }
         .pmNextBtn           { background:#3b82f6 !important;border:none !important;border-radius:10px !important;font-weight:600 !important; }
         .pmConfirmBtn        { background:linear-gradient(135deg,#10b981,#3b82f6) !important;border:none !important;border-radius:10px !important;font-weight:700 !important;height:46px !important;font-size:14px !important; }
 

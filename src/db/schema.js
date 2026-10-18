@@ -186,6 +186,7 @@ export const members = pgTable("members", {
 
   dateJoin: day("date_join").notNull(),
   payAmount: integer("pay_amount").notNull().default(200),
+  fixedLimit: integer("fixed_limit"), // fixed rakam: at most this much in all for closings (NULL = no limit)
 
   joinFees: integer("join_fees").notNull().default(0),
   joinFeesDone: boolean("join_fees_done").notNull().default(false),
@@ -234,6 +235,7 @@ export const dues = pgTable("dues", {
   payerMemberId: text("payer_member_id").notNull().references(() => members.id, { onDelete: "cascade" }),
   amount: integer("amount").notNull(), // payer's payAmount when the due was created
   paidAmount: integer("paid_amount").notNull().default(0),
+  baseAmount: integer("base_amount"), // full amount before the member's fixed limit cut it (NULL = not cut)
   status: dueStatusEnum("status").notNull().default("pending"),
   dueDate: day("due_date"),
   addedManually: boolean("added_manually").notNull().default(false),
@@ -498,4 +500,62 @@ export const whatsappMessages = pgTable("whatsapp_messages", {
   index("wa_phone_idx").on(t.adminId, t.phone, t.createdAt),
   index("wa_provider_idx").on(t.providerId),
   index("wa_member_event_idx").on(t.memberId, t.event),
+]);
+
+// ─── Advance (अग्रिम) ledger, migration 0012 ─────────────────────────────────
+// deposit + / use − / return + / refund −  → balance (services/advances.js)
+export const memberAdvances = pgTable("member_advances", {
+  id: id(),
+  programId: text("program_id").notNull().references(() => programs.id, { onDelete: "cascade" }),
+  memberId: text("member_id").notNull().references(() => members.id, { onDelete: "cascade" }),
+  kind: text("kind").notNull(),                 // deposit | use | return | refund
+  amount: integer("amount").notNull(),
+  method: text("method").notNull().default("cash"),
+  paymentDate: day("payment_date").notNull(),
+  reference: str("reference"),
+  note: str("note"),
+  batchId: text("batch_id"),                     // use: the payment batch it paid
+  transactionId: text("transaction_id"),         // return: the reversed transaction
+  status: text("status").notNull().default("completed"),
+  agentId: text("agent_id"),                     // collected by this agent (cash hisaab)
+  createdById: str("created_by_id"),
+  createdByName: str("created_by_name"),
+  extra: json("extra", {}),
+  createdAt: createdAt(),
+}, (t) => [
+  index("adv_member_idx").on(t.memberId, t.createdAt),
+  index("adv_program_idx").on(t.programId, t.paymentDate),
+  index("adv_batch_idx").on(t.batchId),
+]);
+
+// App payment request: member / agent paid the trust by UPI / bank and asks the office to record it
+// (drizzle/0014_payment_requests.sql). Approving writes a normal payment; see services/paymentRequests.js.
+export const paymentRequests = pgTable("payment_requests", {
+  id: id(),
+  adminId: text("admin_id").notNull().references(() => admins.id, { onDelete: "cascade" }),
+  requestNo: text("request_no").notNull(),
+  requestedByRole: text("requested_by_role").notNull(),   // member | agent
+  requestedByAccountId: str("requested_by_account_id"),
+  requestedByName: str("requested_by_name"),
+  agentId: text("agent_id"),
+  amount: integer("amount").notNull(),                    // what the person says he paid
+  expectedAmount: integer("expected_amount").notNull().default(0), // what the chosen dues / fees came to
+  method: text("method").notNull().default("upi"),
+  reference: str("reference"),                            // UTR / ref
+  paymentDate: day("payment_date").notNull(),
+  screenshotUrl: str("screenshot_url"),
+  note: str("note"),
+  items: json("items", []),                               // [{ memberId, programId, dueIds, joinFee }]
+  status: text("status").notNull().default("pending"),    // pending | approved | rejected | cancelled
+  reviewedById: str("reviewed_by_id"),
+  reviewedByName: str("reviewed_by_name"),
+  reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+  rejectReason: str("reject_reason"),
+  result: json("result", {}),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+}, (t) => [
+  index("payreq_admin_status_idx").on(t.adminId, t.status, t.createdAt),
+  index("payreq_account_idx").on(t.requestedByAccountId, t.createdAt),
+  index("payreq_reference_idx").on(t.adminId, t.reference),
 ]);

@@ -23,6 +23,7 @@ import { useSelector } from 'react-redux';
 import { api } from '@/lib/client/api';
 import { uploadFile } from '@/lib/services/storageService';
 import { useAuth } from '@/lib/AuthProvider';
+import { FixedLimitField } from '@/components/common/fixedLimit/FixedLimit';
 import { gender } from '@/lib/staticData';
 import { useMasterLists } from '@/lib/client/useMasterLists';
 
@@ -286,7 +287,8 @@ const EditMember = ({ memberData, programId, onSuccess, setOpen, open }) => {
         selectedAgent: memberData.agentId || undefined,
         joinFeesDone: joinFeesDoneStatus,
         joinFeesPaymentType: joinFeesPaymentType,
-        joinFeesTxtId: memberData?.joinFeesTxtId || ""
+        joinFeesTxtId: memberData?.joinFeesTxtId || "",
+        fixedLimit: memberData?.fixedLimit ?? null,
       };
 
       // Add custom join fees amount if applicable
@@ -575,6 +577,7 @@ const EditMember = ({ memberData, programId, onSuccess, setOpen, open }) => {
         locationGroup: selectedLocationGroup?.location || '',
         locactionGroupId: selectedLocationGroup?.id || '',
         payAmount: effectivePay,
+        ...(values.fixedLimit !== undefined ? { fixedLimit: values.fixedLimit || null } : {}), // fixed rakam (only when the field is shown)
         joinFees: joinFees,
         joinFeesDone: values.joinFeesDone || false,
         joinFeesTxtId: values.joinFeesTxtId || "",
@@ -931,6 +934,7 @@ const EditMember = ({ memberData, programId, onSuccess, setOpen, open }) => {
                   />
                 </Form.Item>
               </Col>
+              <FixedLimitField payAmount={effectivePay} />
               <Col xs={24} sm={12} lg={8}>
                 <Form.Item label="नामांकन शुल्क">
                   <Input

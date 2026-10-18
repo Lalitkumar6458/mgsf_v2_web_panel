@@ -110,6 +110,8 @@ export function apiPermission(method, pathname) {
 
   // members
   if (is(/^\/programs\/[^/]+\/members(\/|$)/)) return { module: "members", action: read ? "view" : "add" };
+  if (is(/^\/payment-requests(\/|$)/)) return { module: "payments", action: read ? "view" : "add" }; // app payment requests
+  if (is(/^\/programs\/[^/]+\/fixed-limit$/)) return { module: "members", action: "edit" }; // fixed rakam (bulk)
   if (is(/^\/members\/[^/]+\/closing$/)) return { module: "closings", action: act };
   if (is(/^\/members\/[^/]+\/(accept|status|reset-password)$/)) return { module: "members", action: "edit" };
   if (is(/^\/members\/[^/]+\/dues\/check$/)) return { module: "members", action: read ? "view" : "edit" };

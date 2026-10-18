@@ -14,6 +14,9 @@ import { badRequest, forbidden, notFound } from "../lib/errors.js";
 import { camel } from "../lib/case.js";
 import { todayIST, fmtISO } from "../lib/dates.js";
 import { normalizeAppSettings, publicAppStatus } from "../lib/appSettings.js";
+import { displayCount, normalizeCountDisplay } from "../lib/memberCountDisplay.js";
+import { advanceBalance } from "./advances.js";
+import { limitStatus } from "./fixedLimit.js";
 import { isOn } from "../lib/features.js";
 import { loginBlock } from "../lib/auth.js";
 import { getTrustFeatures } from "./features.js";
@@ -49,8 +52,61 @@ export async function getAppSettings(adminId) {
 
 export async function saveAppSettings(adminId, body) {
   const clean = normalizeAppSettings(body);
+  // app member count, "fixed" per yojna: remember the real count when the number was set (then + new members)
+  if (Object.keys(clean.memberCount.custom).length) {
+    const prev = (await getAppSettings(adminId)).memberCount.custom;
+    const actual = await membersOnBooks(adminId);
+    for (const [pid, c] of Object.entries(clean.memberCount.custom)) {
+      if (!actual.has(pid)) { delete clean.memberCount.custom[pid]; continue; } // not this trust's yojna
+      clean.memberCount.custom[pid] = normalizeCountDisplay(c, prev[pid], actual.get(pid));
+    }
+  }
   await db.execute(sql`UPDATE admins SET extra = COALESCE(extra, '{}'::jsonb) || jsonb_build_object('app', ${JSON.stringify(clean)}::jsonb) WHERE id = ${adminId}`);
   return clean;
+}
+
+/** programId → members on books (accepted + closed, not deleted; pending requests not counted) — same as the panel. */
+async function membersOnBooks(adminId) {
+  const { rows } = await db.execute(sql`
+    SELECT p.id, count(m.id) FILTER (WHERE NOT m.deleted AND m.status IN ('accepted', 'closed'))::int AS n
+    FROM programs p LEFT JOIN members m ON m.program_id = p.id WHERE p.admin_id = ${adminId} GROUP BY p.id`);
+  return new Map(rows.map((r) => [r.id, r.n]));
+}
+
+/**
+ * Yojna ki kul sadasya sankhya for the app (Settings → Mobile App → "Member count").
+ * { show: false } when switched off for this login type; else { show: true, programs: [{ id, name, count }] }.
+ *   source yojna  → the yojna's own "Member count kaise dikhe" (same number as the panel)
+ *          actual → real count
+ *          custom → per-yojna percent / fixed set for the app
+ * Percent / fixed only when the trust has "Member count display" (feature-control); otherwise real count.
+ */
+export async function appMemberCount(auth) {
+  const s = (await getAppSettings(auth.adminId)).memberCount;
+  const on = auth.role === "agent" ? s.agents : auth.role === "member" ? s.members : false;
+  if (!on) return { show: false };
+  const { rows } = await db.execute(sql`
+    SELECT p.id, p.name, p.hiname, p.extra->'countDisplay' AS cd,
+      count(m.id) FILTER (WHERE NOT m.deleted AND m.status IN ('accepted', 'closed'))::int AS n
+    FROM programs p LEFT JOIN members m ON m.program_id = p.id
+    WHERE p.admin_id = ${auth.adminId}
+    GROUP BY p.id ORDER BY p.created_at`);
+  const shaped = auth.features?.countDisplay !== false;
+  let list = rows;
+  if (auth.role === "member") {
+    // a member sees only the yojna(s) he and his family are in
+    const ids = await familyIds(auth);
+    const { rows: mine } = await db.execute(sql`SELECT DISTINCT program_id FROM members WHERE id IN (${sql.join(ids.map((x) => sql`${x}`), sql`, `)})`);
+    const set = new Set(mine.map((r) => r.program_id));
+    list = rows.filter((r) => set.has(r.id));
+  }
+  return {
+    show: true,
+    programs: list.map((r) => {
+      const cfg = !shaped || s.source === "actual" ? null : s.source === "custom" ? s.custom[r.id] : r.cd;
+      return { id: r.id, name: r.hiname || r.name, count: displayCount(r.n, cfg) };
+    }),
+  };
 }
 
 /** Public: maintenance, update, payment switches (the app checks this before anything else). */
@@ -119,6 +175,7 @@ export async function paymentInfo(auth, { amount, note }) {
     bank: b.accountNumber ? b : null,
     confirmWhatsapp: s.payment.confirmWhatsapp || ten(trust.contact),
     steps: s.payment.steps, note: s.payment.note,
+    requests: isOn(f, "paymentRequests"), // "भुगतान का अनुरोध भेजें" (UTR + screenshot → office approves)
   };
 }
 
@@ -208,6 +265,11 @@ export async function memberDetail(memberId, m0 = null) {
     LEFT JOIN cl ON cl.id = c.id
     WHERE d.payer_member_id = ${m.id}
     ORDER BY c.closing_date, cl.seq`);
+  // dues in a payment request the office has not checked yet → "जाँच में" (not to be paid twice)
+  const { rows: inReq } = await db.execute(sql`
+    SELECT DISTINCT did FROM payment_requests r, jsonb_array_elements(r.items) it, jsonb_array_elements_text(it->'dueIds') did
+    WHERE r.admin_id = ${m.admin_id} AND r.status = 'pending' AND it->>'memberId' = ${m.id}`);
+  const requested = new Set(inReq.map((x) => x.did));
   const timeline = tl.map((r) => {
     const remaining = r.status === "paid" ? 0 : r.amount - r.paid_amount;
     const due = iso(r.due_date);
@@ -220,7 +282,7 @@ export async function memberDetail(memberId, m0 = null) {
       id: r.id, seq: r.seq || 0, closingId: r.closing_id, name: r.name, regNo: r.reg_no || "", village: r.village || "",
       date: iso(r.closing_date), dueBy: due, paidAt: paid, receiptNo: r.receipt_no || "",
       batchId: r.batch_id || null, batchName: r.batch_name || "",
-      amount: r.amount, paid: r.paid_amount, remaining, status: r.status,
+      amount: r.amount, paid: r.paid_amount, remaining, status: r.status, requested: remaining > 0 && requested.has(r.id),
       timing, lateByDays: timing === "late" ? days(paid, due) : 0, overdue: !!overdue, overdueDays: overdue ? days(t, due) : 0,
     };
   });
@@ -263,6 +325,8 @@ export async function memberDetail(memberId, m0 = null) {
     member: shapeMember(m),
     summary: s,
     joinFee: { total: feeTotal, paid: feePaid, due: Math.max(feeTotal - feePaid, 0), done: feeTotal > 0 ? feePaid >= feeTotal : true },
+    advance: await advanceBalance(m.id), // अग्रिम jama (closing payment mein kaat sakte hain)
+    fixedLimit: await (async () => { const l = await limitStatus(m.id); return l.limit == null ? null : l; })(), // निश्चित राशि
     timeline,
     receipts,
     graceDays: m.due_days ?? 45,
@@ -279,7 +343,8 @@ export async function family(auth) {
     if (!m) continue;
     const d = await memberDetail(id, m);
     members.push({ ...d.member, summary: d.summary, joinFee: d.joinFee, timeline: d.timeline, receipts: d.receipts, graceDays: d.graceDays,
-      dueAmount: d.summary.pendingAmount, dueCount: d.summary.pendingCount, paidAmount: d.summary.paidAmount, joinFeesDue: d.joinFee.due });
+      dueAmount: d.summary.pendingAmount, dueCount: d.summary.pendingCount, paidAmount: d.summary.paidAmount, joinFeesDue: d.joinFee.due,
+      advance: auth.features?.advancePayment === false ? 0 : d.advance, fixedLimit: auth.features?.fixedLimit === false ? null : d.fixedLimit });
   }
   const programs = [];
   for (const m of members) if (!programs.find((p) => p.id === m.programId)) programs.push({ id: m.programId, name: m.programName });

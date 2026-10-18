@@ -19,7 +19,7 @@ import {
 } from 'antd';
 import {
     FiSearch, FiDownload, FiFileText, FiPrinter, FiColumns, FiSliders, FiX, FiRefreshCw,
-    FiAward, FiCreditCard, FiUsers, FiAlertCircle, FiChevronDown
+    FiAward, FiCreditCard, FiUsers, FiAlertCircle, FiChevronDown, FiLock
 } from 'react-icons/fi';
 import { MdOutlinePendingActions } from 'react-icons/md';
 import { GrCertificate } from 'react-icons/gr';
@@ -42,6 +42,7 @@ import MemberPaymentDetails from './MemberPaymentDetails';
 import MemberExportPDF from './MemberExportPDF';
 import JoinFeesMemberList from './JoinFeesCom/JoinFeesMemberList';
 import { getStateLabel, getDistrictLabel } from '@/lib/staticData';
+import { FixedLimitModal, FixedLimitTag, useFixedLimitOn } from '@/components/common/fixedLimit/FixedLimit';
 import { amountsHidden, useAmountsHidden, MASK, AmountsEye } from "@/lib/client/privacy";
 
 const MemberPdfExportDrawer = dynamic(() => import('./MemberPdfExportDrawer'), { ssr: false });
@@ -103,9 +104,9 @@ const COLUMN_KEYS = [
     ['gotra', 'Gotra'], ['phone', 'Phone'], ['gender', 'Gender'], ['village', 'Village'], ['_district', 'District'],
     ['_state', 'State'], ['guardian', 'Guardian'], ['agentName', 'Agent'], ['addedByName', 'Created by'],
     ['dateJoin', 'Join date'], ['ageGroupRange', 'Age group'], ['payAmount', 'Kist'], ['joinFeesDone', 'Join fees'],
-    ['openAmount', 'Dues'], ['_bucket', 'Status'], ['aadhaarNo', 'Aadhaar'],
+    ['openAmount', 'Dues'], ['fixedLimit', 'Fixed rakam'], ['_bucket', 'Status'], ['aadhaarNo', 'Aadhaar'],
 ];
-const DEFAULT_VISIBLE = ['registrationNumber', 'fatherName', 'phone', 'village', 'agentName', 'dateJoin', 'joinFeesDone', 'openAmount', '_bucket'];
+const DEFAULT_VISIBLE = ['registrationNumber', 'fatherName', 'phone', 'village', 'agentName', 'dateJoin', 'joinFeesDone', 'openAmount', 'fixedLimit', '_bucket'];
 const COLS_STORE = 'mgsf.memberCols.v1';
 const GRID_THEME = themeQuartz.withParams({
     fontSize: 13, headerBackgroundColor: '#fafaf8', headerFontWeight: 600, rowHoverColor: '#f5f8fe',
@@ -131,6 +132,7 @@ const MemberList = () => {
 
     const [isExportOpen,         setIsExportOpen]         = useState(false);   // print view
     const [isPdfOpen,            setIsPdfOpen]            = useState(false);   // real PDF
+    const [limitOpen,            setLimitOpen]            = useState(false);   // fixed rakam (bulk)
     const [JoinFeesMemberListOpen, setJoinFeesMemberListOpen] = useState(false);
     const [isCertDownloading,    setIsCertDownloading]    = useState(false);
 
@@ -148,6 +150,7 @@ const MemberList = () => {
     const { user }           = useAuth();
     const can                = useCan();
     const feature            = useFeature();
+    const limitOn            = useFixedLimitOn();
     const { modal }          = App.useApp();
     const gridRef            = useRef();
     const amountsAreHidden   = useAmountsHidden();
@@ -542,12 +545,14 @@ const MemberList = () => {
                 ? <span className="text-red-600 font-semibold" title={`${data.openDues} pending closings`}>{inr(data.openAmount)} <span className="text-[11px] text-gray-400 font-normal">({data.openDues})</span></span>
                 : <span className="text-gray-300">—</span>,
         },
+        { field: 'fixedLimit', headerName: 'Fixed rakam', minWidth: 210, hide: hidden('fixedLimit') || !limitOn,
+          cellRenderer: ({ data }) => data.fixedLimit != null ? <FixedLimitTag limit={data.fixedLimit} paid={data.paidTotal} /> : <span className="text-gray-300">—</span> },
         { field: '_bucket', headerName: 'Status', minWidth: 110, hide: hidden('_bucket'), cellRenderer: ({ value }) => <StatusPill b={value} /> },
         { field: 'aadhaarNo', headerName: 'Aadhaar', minWidth: 150, hide: hidden('aadhaarNo'), cellRenderer: ({ value }) => <MaskedAadhaar value={value} empty="" /> },
         { colId: 'actions', headerName: '', pinned: 'right', width: 118, minWidth: 118, maxWidth: 118, sortable: false, filter: false, resizable: false,
           cellRenderer: ({ data }) => rowActions(data) },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    ], [visibleCols, selectedProgram?.id, user]);
+    ], [visibleCols, selectedProgram?.id, user, limitOn]);
 
     const defaultColDef = useMemo(() => ({ sortable: true, filter: false, resizable: true, flex: 1, suppressHeaderMenuButton: true }), []);
     const rowSelection = useMemo(() => ({ mode: 'multiRow', checkboxes: true, headerCheckbox: true, enableClickSelection: false }), []);
@@ -728,6 +733,7 @@ const MemberList = () => {
                     <Button size="small" icon={<FiFileText />} onClick={() => setIsPdfOpen(true)}>PDF</Button>
                     <Button size="small" icon={<FiDownload />} onClick={exportCsv}>CSV</Button>
                     {feature('certificates') && <Button size="small" icon={<FiAward />} loading={isCertDownloading} onClick={() => downloadMultipleCertificates(selectedRows, selectedProgram)}>Certificates</Button>}
+                    {limitOn && can('members', 'edit') ? <Button size="small" icon={<FiLock />} onClick={() => setLimitOpen(true)}>Fixed rakam</Button> : null}
                     <Button size="small" type="text" icon={<FiX />} onClick={() => gridRef.current?.api?.deselectAll()}>Clear</Button>
                 </div>
             ) : (
@@ -766,6 +772,10 @@ const MemberList = () => {
             </div>
 
             {/* ── Exports ──────────────────────────────────────────────────── */}
+            {limitOpen && (
+                <FixedLimitModal open={limitOpen} programId={selectedProgram?.id} members={selectedRows}
+                    onClose={() => setLimitOpen(false)} onDone={() => onGridReady()} />
+            )}
             {isPdfOpen && (
                 <MemberPdfExportDrawer
                     open={isPdfOpen} onClose={() => setIsPdfOpen(false)}

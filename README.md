@@ -390,6 +390,72 @@ Har trust apna Gupshup app jodta hai (**Settings → WhatsApp**). Feature-contro
 | `GET /api/whatsapp/log` | bheje gaye message + status |
 | `GET /api/whatsapp/inbox`, `GET/POST /api/whatsapp/inbox/:phone` | inbox, baatcheet, reply |
 
+## Advance (अग्रिम) payment
+
+Member ya uska agent closing aane se pehle paisa jama kar sakta hai. Closing ka payment lete waqt **"Advance se kaatein"** chunne par pehle advance lagta hai (sabse purani closing pehle), baaki rakam cash / online se. Feature-control switch: `advancePayment`.
+
+- **Panel:**
+  - Add Payment (step 4) mein advance balance aur "Advance se kaatein" tick, saath mein "Abhi lena hai ₹…".
+  - Member → Payment Details → **Advance ₹…** button: jama karein, wapas dein (refund), hisaab dekhein, galat entry cancel karein.
+- **Agent app:**
+  - Member khata mein "अग्रिम जमा" card aur "+ जमा करें" button.
+  - Bhugtan lene ki screen par "अग्रिम से काटें" option.
+  - Agent ne jo cash advance liya, wo uske nakad hisaab mein judta hai.
+- **Member app:** advance balance dikhta hai.
+- **Payment reverse ya closing revert:** jo hissa advance se kata tha, wo wapas advance mein aa jaata hai.
+- Ek hi advance do payment mein nahi lag sakta, kyunki member row lock hota hai.
+- **Hisaab:** table `member_advances` (migration 0012). Har badlav ki ek entry banti hai: deposit +, use −, return +, refund −. Advance se hua payment `transactions.payment_method = 'advance'` mein jaata hai.
+- **Code:** `src/services/advances.js`. **Tests:** `tests/advances.test.js`, aur `tests/core-audit.test.js` (random advance operations ke saath).
+
+## Fixed rakam (kul seema)
+
+Kisi sadasya ki kul closing rakam ki seema tay kar sakte hain, jaise ₹15,200. Closing ke due tab tak bante rahenge jab tak unka total seema tak na pahunch jaaye. Jo closing seema paar karti hai, uska due sirf bachi hui rakam ka banta hai (jaise ₹100). Uske baad ki closings ka koi due nahi banta. Feature-control switch: `fixedLimit` (Basic preset mein band).
+
+- **Kahan set karein:**
+  - Members page → sadasya chunein (jaise 5) → **Fixed rakam** → rakam daalein. "Seema hatayein" chunne par pehle jaisa ho jaata hai.
+  - Ek sadasya ke liye: Add / Edit member form mein "Fixed rakam (kul seema)". Khaali chhodne ka matlab hai koi seema nahi.
+- **Advance:**
+  - Advance sirf (seema − ab tak bhara − pehle se jama advance) tak liya ja sakta hai. Panel aur agent app dono yahi bachi rakam dikhate hain.
+  - Bulk modal mein "baki rakam advance mein jama karein (cash)" chunne par har sadasya ki bachi rakam ek saath advance mein jama ho jaati hai.
+- **Niyam:**
+  - Jo paisa bhara ja chuka hai, wo kabhi nahi kat-ta. Agar seema pehle se bhari rakam se kam rakhi, to bhara paisa waisa hi rehta hai aur aage kuch baki nahi aata.
+  - Seema ka hissa sabse purani closing ko pehle milta hai.
+  - Jab koi closing revert / delete hoti hai, ya payment reverse hota hai, ya seema badhti / hat-ti hai, to kata hua due (`dues.base_amount` mein poori rakam rakhi rehti hai) wapas bad jaata hai. Jo due seema ki wajah se bana hi nahi tha, wo bhi ban jaata hai.
+  - "Correct Payments" seema ke baad wali closings ko missing nahi batata.
+- **Dikhta kahan hai:**
+  - Member list mein "Fixed rakam" column.
+  - Add Payment aur Bulk payment screen par "Fixed ₹15,200 · ₹X baki" tag.
+  - Mobile app ke member khata mein "निश्चित राशि" card.
+- **Data:** `members.fixed_limit` aur `dues.base_amount` (migration 0013).
+- **Code:** `src/services/fixedLimit.js` (`applyLimit`, `setFixedLimit`, `limitStatus`). **Tests:** `tests/fixed-limit.test.js`, aur `tests/core-audit.test.js` (random "limit" operation ke saath).
+
+## App se bhugtan ka anurodh (UTR + screenshot)
+
+Member (apne aur family ke liye) ya agent (apne member ke liye) trust ke UPI QR / bank mein bhugtan karta hai. Phir app se **"भुगतान का अनुरोध"** bhejta hai: kaunsi closing / join fee, rakam, UTR, tareekh aur screenshot. Office panel mein jaanch kar **Sweekar** kare to payment wahin jama ho jaata hai. Feature-control switch: `paymentRequests` (Basic preset mein band). App mein ye tabhi dikhta hai jab Settings → Mobile App mein "app se bhugtan" chalu ho.
+
+- **App:**
+  - Member "भुगतान करें" mein closing chunta hai. QR screen ke neeche ek form aata hai: UTR, tareekh, screenshot, note → "अनुरोध भेजें".
+  - Agent member khata → "QR भुगतान सूचना".
+  - "मेरे भुगतान अनुरोध" screen mein har request ka haal dikhta hai: जाँच में / जमा / अस्वीकार (kaaran ke saath). Jo request abhi jaanch mein hai, use wahan se रद्द bhi kar sakte hain.
+  - Jo closing kisi request mein jaanch mein hai, wo dobara chunne mein nahi aati. Member khata mein uski soochna dikhti hai.
+- **Panel:** Payments → **App payment requests** (menu par laal ginti).
+  - Drawer mein screenshot, UTR aur unke hisaab ki rakam dikhti hai.
+  - Office "bank mein kitna aaya" badal sakta hai, aur closing / join fee tick ya untick kar sakta hai.
+  - Sweekar karne par ek hi transaction mein sab hota hai:
+    - closing jama hoti hain (sabse purani pehle; rakam kam ho to aakhri wali aadhi);
+    - phir join fee jama hoti hai;
+    - zyada paisa ho to "advance mein daalein" chunne par member ke advance mein jaata hai.
+  - Transactions UTR ke saath bante hain, agent commission judta hai, aur member ko push + WhatsApp paid rasid jaati hai.
+  - Asweekar karne ke liye kaaran likhna zaroori hai. Bhejne wale ko wo kaaran app mein aur push mein dikhta hai.
+- **Suraksha:**
+  - Ek UTR do baar nahi chal sakta: na kisi jama payment mein, na kisi khuli ya sweekar request mein.
+  - Ek closing do khuli requests mein nahi ho sakti.
+  - Agent sirf apne member ke liye request bhej sakta hai, aur member sirf apne aur family ke liye.
+  - Aage ki tareekh nahi chal sakti.
+  - Members sirf `payments` folder mein screenshot upload kar sakte hain.
+- **Data:** table `payment_requests` (migration 0014). Isme `items` aur `result` dono jsonb hain.
+- **Code:** `src/services/paymentRequests.js`. **Tests:** `tests/payment-requests.test.js`.
+
 ## Aage ka kaam (phases)
 
 - [x] **Phase 1:** database, business logic, API, Firestore migration, Docker deploy, tests

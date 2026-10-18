@@ -7,6 +7,8 @@
 //   support      phone / WhatsApp / e-mail / office hours shown in the app's settings
 //   notify       automatic push notifications (Expo): payment received, new closing (member / agent)
 //   aboutText    a short "about the trust" paragraph
+//   memberCount  yojna ki kul sadasya sankhya app mein: agents / members ko dikhe ya nahi, aur kaun si ginti
+//                (yojna jaisa = Yojna → "Member count kaise dikhe"; ya app ke liye alag: asli / % / fixed, har yojna ki)
 
 const str = (v, max = 200) => (typeof v === "string" ? v.trim().slice(0, max) : "");
 const bool = (v, d = false) => (typeof v === "boolean" ? v : d);
@@ -31,7 +33,24 @@ export const APP_DEFAULTS = {
   support: { phone: "", whatsapp: "", email: "", officeHours: "", website: "" },
   notify: { payment: true, closing: true, agentClosing: true },
   aboutText: "",
+  memberCount: { agents: false, members: false, source: "yojna", custom: {} },
 };
+
+const COUNT_SOURCES = ["yojna", "actual", "custom"];
+/** custom: { [programId]: { mode: "percent", percent } | { mode: "fixed", fixed, baseActual, setAt } } (cleaned by memberCountDisplay) */
+function normCustom(raw) {
+  const out = {};
+  if (!raw || typeof raw !== "object") return out;
+  for (const [pid, c] of Object.entries(raw).slice(0, 50)) {
+    if (!/^[\w-]{1,64}$/.test(pid) || !c || typeof c !== "object") continue;
+    const mode = ["actual", "percent", "fixed"].includes(c.mode) ? c.mode : "actual";
+    const int = (v) => (Number.isFinite(Number(v)) ? Math.round(Number(v)) : 0);
+    if (mode === "percent") out[pid] = { mode, percent: Math.min(Math.max(int(c.percent) || 100, 1), 1000) };
+    else if (mode === "fixed") out[pid] = { mode, fixed: Math.max(int(c.fixed), 0), baseActual: Math.max(int(c.baseActual), 0), setAt: str(c.setAt, 40) };
+    else out[pid] = { mode };
+  }
+  return out;
+}
 
 /** Whatever was saved → full, safe settings object. */
 export function normalizeAppSettings(raw) {
@@ -42,6 +61,7 @@ export function normalizeAppSettings(raw) {
   const b = p.bank || {};
   const s = r.support || {};
   const nt = r.notify || {};
+  const mc = r.memberCount || {};
   const upiId = str(p.upiId, 120);
   const steps = Array.isArray(p.steps) ? p.steps : typeof p.steps === "string" ? p.steps.split("\n") : [];
   return {
@@ -73,6 +93,12 @@ export function normalizeAppSettings(raw) {
     },
     notify: { payment: bool(nt.payment, true), closing: bool(nt.closing, true), agentClosing: bool(nt.agentClosing, true) },
     aboutText: str(r.aboutText, 1500),
+    memberCount: {
+      agents: bool(mc.agents),
+      members: bool(mc.members),
+      source: COUNT_SOURCES.includes(mc.source) ? mc.source : "yojna",
+      custom: normCustom(mc.custom),
+    },
   };
 }
 

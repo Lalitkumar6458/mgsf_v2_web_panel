@@ -11,6 +11,8 @@
 //   - P.payAmount > 0  (pay amount 0 = this member pays nothing)
 import { sql, eq } from "drizzle-orm";
 import { cancelCommissions } from "./commissions.js";
+import { returnAdvanceTx } from "./advances.js";
+import { applyLimit, limitedPayersOf, limitedMembers } from "./fixedLimit.js";
 import { db, schema } from "../db/index.js";
 import { badRequest, conflict, notFound } from "../lib/errors.js";
 import { toDate, todayIST, addDays, fmtISO } from "../lib/dates.js";
@@ -86,7 +88,9 @@ async function insertDuesForClosing(tx, m) {
               FROM members c WHERE c.id = ${m.id})
     FROM (${eligiblePayers(m.program_id, m.id, m.closing_date)}) e
     ON CONFLICT (closing_member_id, payer_member_id) DO NOTHING`);
-  return res.rowCount ?? 0;
+  // members with a fixed limit: this closing gets only what is left of it (nothing once it is reached)
+  const lim = await applyLimit(tx, await limitedPayersOf(tx, m.id));
+  return Math.max((res.rowCount ?? 0) - lim.removed, 0);
 }
 
 /**
@@ -123,6 +127,8 @@ export async function recordClosing(memberId, input) {
         AND c.closing_date > ${closingDay}::date AND d.status = 'pending' AND d.paid_amount = 0`);
 
     const created = await insertDuesForClosing(tx, m);
+    // he has a fixed limit: dues of later closings went away → that room goes to his older closings
+    await refreshLimited(tx, memberId);
     return { success: true, memberId, closingDate: closingDay, duesCreated: created, ownDuesRemoved: removed.rowCount ?? 0 };
   });
 }
@@ -174,6 +180,8 @@ export async function updateClosing(memberId, input) {
       added = await insertDuesForClosing(tx, m);
       // his own dues as a payer: owes closings before his (new) closing date only
       asPayer = await resyncPayer(tx, memberId, { strict: true });
+      // closing order changed → fixed-limit members' shares move (a closing they had no room for may get it now)
+      for (const pid of await limitedMembers(tx, m.program_id)) if (pid !== memberId) await resyncPayer(tx, pid, { strict: false });
     }
     return {
       success: true, memberId, closingDate: newDay, duesAdded: added, duesRemoved: removed,
@@ -202,15 +210,21 @@ export async function revertClosing(memberId, { force = false } = {}) {
       throw conflict(`${paid.n} payments (₹${paid.amount}) are already received for this closing.`, paid);
     }
 
+    // payments of this closing made from advance: that money goes back to each payer's advance
+    const { rows: fromAdvance } = await tx.execute(sql`
+      SELECT * FROM transactions WHERE closing_member_id = ${memberId} AND status = 'completed' AND payment_method = 'advance'
+      ORDER BY payer_member_id`);
     const reversed = await tx.execute(sql`
       UPDATE transactions SET status = 'reversed', due_id = NULL, updated_at = now(),
         extra = extra || jsonb_build_object('reversedReason', 'closing reverted', 'reversedAt', now())
       WHERE closing_member_id = ${memberId} AND status = 'completed'`);
+    for (const t of fromAdvance) await returnAdvanceTx(tx, t, null);
     if ((reversed.rowCount ?? 0) > 0) {
       await cancelCommissions(tx, "closing",
         sql`c.source_id IN (SELECT id FROM transactions WHERE closing_member_id = ${memberId} AND status = 'reversed')`,
         "Closing reverted");
     }
+    const limited = await limitedPayersOf(tx, memberId);
     const deleted = await tx.execute(sql`DELETE FROM dues WHERE closing_member_id = ${memberId}`);
 
     await tx.execute(sql`
@@ -219,9 +233,10 @@ export async function revertClosing(memberId, { force = false } = {}) {
         extra = extra || jsonb_build_object('revertedAt', now())
       WHERE id = ${memberId}`);
 
-    // He owes closings dated after his (now cancelled) closing date again
     // He owes closings dated after his (now cancelled) closing date again — same rule as everyone
     const resynced = (await resyncPayer(tx, memberId, { strict: false })).added;
+    // fixed-limit payers: the limit this closing used is free again → their later closings get it
+    for (const pid of limited) if (pid !== memberId) await resyncPayer(tx, pid, { strict: false });
 
     return {
       success: true,
@@ -283,7 +298,17 @@ export async function resyncPayer(tx, memberId, { strict = true } = {}) {
       ON CONFLICT (closing_member_id, payer_member_id) DO NOTHING`);
     added = res.rowCount ?? 0;
   }
-  return { added, removed: removed.rowCount ?? 0, paidKept: camel(paidKept) };
+  // fixed limit: dues only up to the limit (also grows dues back when the limit was raised / removed)
+  const lim = await applyLimit(tx, [p.id]);
+  return { added: Math.max(added - lim.removed, 0), removed: removed.rowCount ?? 0, paidKept: camel(paidKept), limitChanged: lim.changed };
+}
+
+/** A member with a fixed limit (or cut dues): make his dues fit it again, re-creating dues that now have room. */
+export async function refreshLimited(tx, memberId) {
+  const { rows: [r] } = await tx.execute(sql`
+    SELECT (m.fixed_limit IS NOT NULL OR EXISTS (SELECT 1 FROM dues d WHERE d.payer_member_id = m.id AND d.base_amount IS NOT NULL)) AS limited
+    FROM members m WHERE m.id = ${memberId}`);
+  if (r?.limited) await resyncPayer(tx, memberId, { strict: false });
 }
 
 /**
@@ -313,7 +338,7 @@ export async function payerDuesCheck(memberId) {
       ${p.closing_date ? sql`AND c.closing_date <= ${fmtISO(p.closing_date)}::date` : sql``}`;
   const canOwe = !p.deleted && p.active && !p.blocked && p.pay_amount > 0 && ["accepted", "closed"].includes(p.status);
 
-  const { rows: missing } = canOwe
+  const { rows: missingAll } = canOwe
     ? await db.execute(sql`
         SELECT c.id AS closing_member_id, c.display_name, c.registration_number, c.closing_date
         FROM members c
@@ -321,6 +346,13 @@ export async function payerDuesCheck(memberId) {
           AND NOT EXISTS (SELECT 1 FROM dues d WHERE d.closing_member_id = c.id AND d.payer_member_id = ${p.id})
         ORDER BY c.closing_date`)
     : { rows: [] };
+  // fixed limit: closings past the limit are not owed — only as many as the limit still has room for
+  let missing = missingAll;
+  if (p.fixed_limit != null) {
+    const { rows: [t] } = await db.execute(sql`SELECT COALESCE(sum(amount), 0)::int AS s FROM dues WHERE payer_member_id = ${p.id}`);
+    let room = Number(p.fixed_limit) - t.s;
+    missing = missingAll.filter(() => { const ok = room > 0; room -= p.pay_amount; return ok; });
+  }
   const { rows: extra } = await db.execute(sql`
     SELECT d.id AS due_id, d.status, d.paid_amount, d.closing_member_id, c.display_name, c.closing_date
     FROM dues d JOIN members c ON c.id = d.closing_member_id
@@ -347,6 +379,7 @@ export async function applyPayerCorrection(memberId, { addClosingIds = [], remov
           AND c.program_id = ${p.program_id} AND c.closing_date IS NOT NULL AND c.id <> ${p.id}
         ON CONFLICT (closing_member_id, payer_member_id) DO NOTHING`);
       added = r.rowCount ?? 0;
+      added = Math.max(added - (await applyLimit(tx, [p.id])).removed, 0); // fixed limit reached → not added
     }
     if (removeDueIds.length) {
       const r = await tx.execute(sql`

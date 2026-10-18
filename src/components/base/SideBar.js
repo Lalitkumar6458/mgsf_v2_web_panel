@@ -6,6 +6,7 @@ import {
   FiGrid, FiUsers, FiBarChart2, FiBookOpen, FiSettings, FiCreditCard, FiLayers, FiChevronDown,
 } from 'react-icons/fi';
 import { useAuth, useCan, useFeature } from '@/lib/AuthProvider';
+import { api } from '@/lib/client/api';
 import { useSelector } from 'react-redux';
 import { displayName as trustDisplayName, initials as trustInitials } from '@/lib/trust/profile';
 
@@ -33,6 +34,7 @@ function buildMenu(can, feature) {
         { label: 'Closing payments', link: '/closingPayments', show: can('payments') },
         { label: 'Payment history', link: '/transactions', show: can('payments') },
         { label: 'Agent cash hisaab', link: '/agentCash', show: can('payments') && feature('cashHandover') },
+        { label: 'App payment requests', link: '/paymentRequests', show: can('payments') && feature('paymentRequests'), badge: 'payReq' },
       ],
     },
     {
@@ -85,6 +87,22 @@ function buildMenu(can, feature) {
   return kept.filter((g, i) => !g.section || (kept[i + 1] && !kept[i + 1].section));
 }
 
+/** pending app payment requests → red count on the menu (checked every 2 minutes) */
+function usePayReqBadge(on) {
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    if (!on) return undefined;
+    let stop = false;
+    const load = () => api.get('/payment-requests/count').then((r) => { if (!stop) setN(r.pending || 0); }).catch(() => {});
+    load();
+    const t = setInterval(load, 120000);
+    const onChange = () => load();
+    window.addEventListener('mgsf:payreq', onChange);
+    return () => { stop = true; clearInterval(t); window.removeEventListener('mgsf:payreq', onChange); };
+  }, [on]);
+  return { payReq: n };
+}
+
 export default function SideBar({ collapsed, onClose }) {
   const trust = useSelector((state) => state.data.trustData);
   const pathname = usePathname();
@@ -93,6 +111,7 @@ export default function SideBar({ collapsed, onClose }) {
   const can = useCan();
   const feature = useFeature();
   const menu = useMemo(() => buildMenu(can, feature), [can, feature]);
+  const badges = usePayReqBadge(can('payments') && feature('paymentRequests'));
 
   // is this link the page we are on? (path, and the ?tab= when the link has one)
   const isOn = (child, siblings = []) => {
@@ -181,6 +200,7 @@ export default function SideBar({ collapsed, onClose }) {
                   <Link href={c.link} onClick={onClose} className={`sb-subitem ${active ? 'is-active' : ''}`} aria-current={active ? 'page' : undefined}>
                     <span className="sb-dot" />
                     <span className="truncate">{c.label}</span>
+                    {c.badge && badges[c.badge] ? <span className="ml-auto rounded-full bg-red-500 px-1.5 text-[10px] font-bold leading-4 text-white">{badges[c.badge]}</span> : null}
                   </Link>
                 </li>
               );

@@ -7,7 +7,7 @@ import { camel } from "@/lib/case.js";
 import { toLegacyMember } from "@/lib/client/legacy.js";
 
 /**
- * Closing Payments page: every accepted member with his closing payment totals
+ * Closing Payments page: every active member + closed / blocked ones who still owe, with closing payment totals
  * (same response as the old Firestore route).  GET ?programId=
  */
 export const GET = route(async ({ auth, query }) => {
@@ -36,7 +36,9 @@ export const GET = route(async ({ auth, query }) => {
              sum(d.amount) AS total_amount, sum(d.paid_amount) AS total_paid
       FROM dues d WHERE d.payer_member_id = m.id
     ) x ON true
-    WHERE m.program_id = ${programId} AND NOT m.deleted AND m.active AND NOT m.blocked AND m.status = 'accepted'
+    -- active members, and also closed / blocked / inactive ones who still owe (they must be able to pay)
+    WHERE m.program_id = ${programId} AND NOT m.deleted AND m.status IN ('accepted', 'closed')
+      AND ((m.active AND NOT m.blocked AND m.status = 'accepted') OR COALESCE(x.pending_closing_count, 0) > 0)
       ${auth.role === "agent" ? sql`AND m.agent_id = ${auth.agentId}` : sql``}
     ORDER BY m.created_at DESC`);
 

@@ -35,6 +35,8 @@ import { useAuth } from '@/lib/AuthProvider';
 import { PDFDownloadLink, PDFViewer } from '@react-pdf/renderer';
 import SingleMemberPendingPaymentPdf from './PendingPaymentPdf';
 import MemberPaymentCorrection from './MemberPaymentCorrection';
+import AdvanceModal, { useAdvance } from '@/components/common/advance/AdvanceModal';
+import { useFeature } from '@/lib/AuthProvider';
 import { useSelector } from 'react-redux';
 import dayjs from 'dayjs';
 const { Title, Text } = Typography;
@@ -44,6 +46,9 @@ function MemberPaymentDetails({ visible, onClose, memberData, paymentReport, loa
     const [activeTab, setActiveTab] = useState('1');
     // "Correct Payments" — compare this member's entries with the closing list
     const [correctionOpen, setCorrectionOpen] = useState(false);
+    const [advanceOpen, setAdvanceOpen] = useState(false);
+    const advanceOn = useFeature()('advancePayment');
+    const adv = useAdvance(advanceOn && visible ? memberData?.id : null, visible);
     const TrustData =useSelector(state => state.data.trustData) 
     console.log(paymentReport,'paymentReport')
     const selectedProgram = useSelector((state) => state.data.selectedProgram);
@@ -221,6 +226,13 @@ function MemberPaymentDetails({ visible, onClose, memberData, paymentReport, loa
             loading={loading}
             extra={
                 <div className='flex items-center gap-2'>
+                    {advanceOn ? (
+                        <Tooltip title="Advance (अग्रिम) jama karein / hisaab dekhein">
+                            <Button onClick={() => setAdvanceOpen(true)} style={adv.data?.balance > 0 ? { borderColor: '#10b981', color: '#047857', fontWeight: 600 } : undefined}>
+                                Advance ₹{(adv.data?.balance || 0).toLocaleString('en-IN')}
+                            </Button>
+                        </Tooltip>
+                    ) : null}
                     <Tooltip title="Find missing / extra closing entries for this member and fix them">
                         <Button icon={<ToolOutlined />} onClick={() => setCorrectionOpen(true)}>
                             Correct Payments
@@ -440,6 +452,7 @@ function MemberPaymentDetails({ visible, onClose, memberData, paymentReport, loa
         />
                 </PDFViewer>
             </Drawer>
+                    {advanceOn ? <AdvanceModal open={advanceOpen} member={member} onClose={() => setAdvanceOpen(false)} onChanged={() => adv.reload()} /> : null}
         </Drawer>
     );
 }

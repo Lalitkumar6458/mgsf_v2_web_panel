@@ -1,5 +1,6 @@
 // Reports. What took a 1 GiB Cloud Function + thousands of Firestore reads
 // is now one or two SQL queries.
+import { advanceBalance } from "./advances.js";
 import { sql } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { fmtDMY } from "../lib/dates.js";
@@ -120,6 +121,10 @@ export async function memberDues(memberId, { status } = {}) {
     return s;
   }, { total: 0, paid: 0, pending: 0, totalAmount: 0, paidAmount: 0 });
   summary.pendingAmount = summary.totalAmount - summary.paidAmount;
+  summary.advance = await advanceBalance(memberId); // अग्रिम jama
+  const { rows: [lim] } = await db.execute(sql`SELECT fixed_limit FROM members WHERE id = ${memberId}`);
+  summary.fixedLimit = lim?.fixed_limit ?? null; // fixed rakam (null = no limit)
+  summary.limitLeft = summary.fixedLimit == null ? null : Math.max(summary.fixedLimit - summary.paidAmount, 0);
   return { dues: camel(rows), summary };
 }
 

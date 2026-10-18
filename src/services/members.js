@@ -8,6 +8,7 @@ import { hashPassword } from "../lib/auth.js";
 import { syncNewlyAccepted, resyncPayer, lockProgram, programOf } from "./closings.js";
 import { camel } from "../lib/case.js";
 import { recordFormJoinFee } from "./joinFees.js";
+import { normLimit, limitedPayersOf } from "./fixedLimit.js";
 
 const { members, accounts } = schema;
 
@@ -36,6 +37,7 @@ export function memberFields(body = {}) {
   for (const k of INT) if (src[k] !== undefined && src[k] !== null && src[k] !== "") out[k] = Math.round(Number(src[k]) || 0);
   for (const k of BOOL) if (src[k] !== undefined) out[k] = Boolean(src[k]);
   for (const k of DATES) if (src[k] !== undefined) out[k] = src[k] ? fmtISO(toDate(src[k])) || null : null;
+  if (src.fixedLimit !== undefined) out.fixedLimit = normLimit(src.fixedLimit); // fixed rakam, null = no limit
   if (Array.isArray(src.extraDetails)) out.extraDetails = src.extraDetails.filter((f) => f?.label && f?.value);
   return out;
 }
@@ -215,11 +217,13 @@ export async function updateMember(member, body) {
   const joinChanged = f.dateJoin && f.dateJoin !== (member.dateJoin ? String(member.dateJoin).slice(0, 10) : null);
   // pay amount set to 0 (pays nothing) or back from 0 → his pending entries follow
   const payChanged = f.payAmount !== undefined && (Number(f.payAmount) > 0) !== (Number(member.payAmount) > 0);
+  // fixed rakam set / changed / removed → his dues are cut to it (or grow back)
+  const limitChanged = f.fixedLimit !== undefined && (f.fixedLimit ?? null) !== (member.fixedLimit ?? null);
   let dues = null;
   const [m] = await db.transaction(async (tx) => {
-    if (joinChanged || payChanged) await lockProgram(tx, member.programId);
+    if (joinChanged || payChanged || limitChanged) await lockProgram(tx, member.programId);
     const res = await tx.update(members).set(f).where(eq(members.id, member.id)).returning();
-    if (joinChanged || payChanged) dues = await resyncPayer(tx, member.id, { strict: !!joinChanged });
+    if (joinChanged || payChanged || limitChanged) dues = await resyncPayer(tx, member.id, { strict: !!joinChanged });
     return res;
   });
   if (f.joinFeesPaidAmount !== undefined && Number(f.joinFeesPaidAmount) > Number(member.joinFeesPaidAmount || 0)) {
@@ -237,9 +241,12 @@ export async function softDeleteMember(memberId) {
     const { rows: [paid] } = await tx.execute(sql`SELECT count(*)::int AS n FROM dues WHERE (payer_member_id = ${memberId} OR closing_member_id = ${memberId}) AND paid_amount > 0`);
     await tx.execute(sql`UPDATE members SET deleted = true, active = false, updated_at = now() WHERE id = ${memberId}`);
     // his own untouched dues as a payer, and — if he was a closing — nobody owes his (deleted) closing any more
+    const limited = (await limitedPayersOf(tx, memberId)).filter((x) => x !== memberId);
     const r = await tx.execute(sql`
       DELETE FROM dues WHERE (payer_member_id = ${memberId} OR closing_member_id = ${memberId})
         AND status = 'pending' AND paid_amount = 0`);
+    // fixed-limit payers: what his closing used of their limit is free again
+    for (const pid of limited) await resyncPayer(tx, pid, { strict: false });
     await tx.execute(sql`UPDATE accounts SET active = false WHERE member_id = ${memberId}`);
     return { success: true, pendingDuesRemoved: r.rowCount ?? 0, keptPaidDues: paid.n };
   });
@@ -259,13 +266,13 @@ export async function listMembers(programId, { status, agentId, q, closed, inclu
 
   const { rows } = await db.execute(sql`
     SELECT m.*, a.display_name AS agent_name, g.name AS closing_group_name,
-      COALESCE(x.open_dues, 0)::int AS open_dues, COALESCE(x.open_amount, 0)::int AS open_amount,
+      COALESCE(x.open_dues, 0)::int AS open_dues, COALESCE(x.open_amount, 0)::int AS open_amount, COALESCE(x.paid_total, 0)::int AS paid_total,
       count(*) OVER()::int AS total_count
     FROM members m
     LEFT JOIN agents a ON a.id = m.agent_id
     LEFT JOIN closing_groups g ON g.id = m.closing_group_id
     LEFT JOIN LATERAL (
-      SELECT count(*) FILTER (WHERE d.status <> 'paid') AS open_dues, sum(d.amount - d.paid_amount) AS open_amount
+      SELECT count(*) FILTER (WHERE d.status <> 'paid') AS open_dues, sum(d.amount - d.paid_amount) AS open_amount, sum(d.paid_amount) AS paid_total
       FROM dues d WHERE d.payer_member_id = m.id
     ) x ON true
     WHERE m.program_id = ${programId}

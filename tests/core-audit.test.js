@@ -15,6 +15,8 @@ import { createMember, acceptMember, updateMember, softDeleteMember } from "../s
 import { recordClosing, updateClosing, revertClosing, listClosings, closingDues } from "../src/services/closings.js";
 import { listMembers } from "../src/services/members.js";
 import { paySingle, payBulk, reverseTransaction } from "../src/services/payments.js";
+import { addAdvance } from "../src/services/advances.js";
+import { setFixedLimit } from "../src/services/fixedLimit.js";
 
 let admin, program;
 const auth = () => ({ role: "admin", adminId: admin.id, accountId: "audit" });
@@ -49,7 +51,7 @@ async function auditBook() {
       AND (p.closing_date IS NULL OR p.closing_date >= c.closing_date)`);
   const { rows: have } = await db.execute(sql`
     SELECT d.id, d.payer_member_id AS payer, d.closing_member_id AS closing, d.amount, d.paid_amount, d.status::text AS status,
-           p.pay_amount, p.deleted AS p_deleted, c.deleted AS c_deleted, c.closing_date
+           d.base_amount, p.pay_amount, p.deleted AS p_deleted, c.deleted AS c_deleted, c.closing_date
     FROM dues d JOIN members p ON p.id = d.payer_member_id JOIN members c ON c.id = d.closing_member_id
     WHERE d.program_id = ${program.id}`);
   const key = (r) => `${r.payer}>${r.closing}`;
@@ -62,7 +64,24 @@ async function auditBook() {
     if (!d.closing_date) problems.push(`due for a closing that is not closed ${key(d)}`);
     if (!shouldSet.has(key(d)) && !(d.paid_amount > 0)) problems.push(`EXTRA due (nothing paid) ${key(d)}`);
   }
-  for (const s of should) if (!haveMap.has(key(s))) problems.push(`MISSING due ${key(s)}`);
+  // fixed rakam: total of his dues = up to the limit (paid money always kept); oldest closing gets it first
+  const { rows: lim } = await db.execute(sql`SELECT id, fixed_limit FROM members WHERE program_id = ${program.id} AND fixed_limit IS NOT NULL AND NOT deleted`);
+  const full = new Map(); // payer → no room left
+  for (const m of lim) {
+    const mine = have.filter((d) => d.payer === m.id).sort((a, b) => String(a.closing_date).localeCompare(String(b.closing_date)));
+    const total = mine.reduce((a, d) => a + d.amount, 0), paid = mine.reduce((a, d) => a + d.paid_amount, 0);
+    const cap = Math.max(m.fixed_limit, paid);
+    if (total > cap) problems.push(`LIMIT ${m.id}: dues ₹${total} > limit ₹${m.fixed_limit}`);
+    if (mine.some((d) => d.amount <= 0)) problems.push(`LIMIT ${m.id}: due of ₹0`);
+    const cut = mine.filter((d) => d.base_amount != null && d.base_amount > d.amount);
+    if (cut.length && total !== cap) problems.push(`LIMIT ${m.id}: due cut but ₹${cap - total} of the limit unused`);
+    if (cut.length) {
+      const firstCut = String(cut[0].closing_date);
+      if (mine.some((d) => String(d.closing_date) > firstCut && d.amount > d.paid_amount)) problems.push(`LIMIT ${m.id}: a later closing got limit before an older one`);
+    }
+    if (total >= cap) full.set(m.id, true);
+  }
+  for (const s of should) if (!haveMap.has(key(s)) && !full.get(s.payer)) problems.push(`MISSING due ${key(s)}`);
 
   // 2. paid amount = completed transactions; status matches
   const { rows: tx } = await db.execute(sql`
@@ -80,6 +99,17 @@ async function auditBook() {
     SELECT count(*)::int AS n FROM transactions t
     WHERE t.program_id = ${program.id} AND t.status = 'completed' AND (t.due_id IS NULL OR NOT EXISTS (SELECT 1 FROM dues d WHERE d.id = t.due_id))`);
   if (o.n) problems.push(`${o.n} completed transactions without a due (money lost)`);
+  // 5. advance (अग्रिम): spent = payments made from it; balance never below 0
+  const { rows: adv } = await db.execute(sql`
+    SELECT m.id,
+      COALESCE((SELECT sum(amount) FROM transactions t WHERE t.payer_member_id = m.id AND t.payment_method = 'advance' AND t.status = 'completed'), 0)::int AS tx,
+      COALESCE((SELECT sum(CASE kind WHEN 'use' THEN amount WHEN 'return' THEN -amount ELSE 0 END) FROM member_advances a WHERE a.member_id = m.id AND a.status = 'completed'), 0)::int AS used,
+      COALESCE((SELECT sum(CASE WHEN kind IN ('deposit','return') THEN amount ELSE -amount END) FROM member_advances a WHERE a.member_id = m.id AND a.status = 'completed'), 0)::int AS bal
+    FROM members m WHERE m.program_id = ${program.id}`);
+  for (const r of adv) {
+    if (r.tx !== r.used) problems.push(`advance ${r.id}: payments from advance ₹${r.tx} but advance used ₹${r.used}`);
+    if (r.bal < 0) problems.push(`advance ${r.id}: balance ${r.bal}`);
+  }
   return problems;
 }
 
@@ -101,7 +131,7 @@ test("random operations: the book stays right after every step", async () => {
 
   for (let step = 0; step < (Number(process.env.AUDIT_STEPS) || 450); step++) {
     const op = pick(["add", "add", "request", "accept", "close", "close", "close", "joinDate", "closeDate", "revert",
-      "pay", "pay", "pay", "partial", "bulk", "bulkCustom", "reverse", "payAmount", "delete"]);
+      "pay", "pay", "pay", "partial", "bulk", "bulkCustom", "reverse", "payAmount", "delete", "advance", "advance", "payAdv", "bulkAdv", "limit"]);
     const alive = (await db.execute(sql`SELECT id, status::text AS status, closing_date FROM members WHERE program_id = ${program.id} AND NOT deleted`)).rows;
     const open = alive.filter((m) => m.status === "accepted");
     const closed = alive.filter((m) => m.closing_date);
@@ -138,7 +168,27 @@ test("random operations: the book stays right after every step", async () => {
           if (t) await ok(reverseTransaction(t.id, { reason: "audit" }, auth()));
           break;
         }
+        case "advance": if (alive.length) await ok(addAdvance(pick(alive).id, { amount: pick([100, 150, 200, 500]) }, auth())); break;
+        case "payAdv": {
+          const [d] = await randomOpenDues(1);
+          if (d) await ok(paySingle({ programId: program.id, payerId: d.payer_member_id, dueIds: [d.id], useAdvance: rnd() < 0.7 ? true : pick([50, 100]),
+            ...(rnd() < 0.3 && d.left > 1 ? { customTotalAmount: Math.max(1, Math.floor(d.left / 2)) } : {}) }, auth()));
+          break;
+        }
+        case "bulkAdv": {
+          const ds = await randomOpenDues(4);
+          if (ds.length) {
+            const sel = {};
+            for (const d of ds) (sel[d.payer_member_id] ||= []).push(d.id);
+            await ok(payBulk({ programId: program.id, memberIds: Object.keys(sel), memberClosingSelections: sel, useAdvance: true }, auth()));
+          }
+          break;
+        }
         case "payAmount": if (alive.length) { const m = pick(alive); await ok(updateMember(await memberRow(m.id), { payAmount: pick([0, 200, 300]) })); } break;
+        case "limit": if (alive.length) {
+          const some = [...new Set([pick(alive).id, pick(alive).id])];
+          await ok(setFixedLimit(program.id, { memberIds: some, fixedLimit: pick([null, 300, 500, 800, 1500]), advance: rnd() < 0.2 ? { method: "cash" } : null }, auth()));
+        } break;
         case "delete": if (alive.length && rnd() < 0.3) await softDeleteMember(pick(alive).id); break;
       }
     } catch (e) {
@@ -151,8 +201,11 @@ test("random operations: the book stays right after every step", async () => {
   const { rows: [c] } = await db.execute(sql`
     SELECT (SELECT count(*) FROM dues WHERE program_id = ${program.id})::int AS dues,
            (SELECT count(*) FROM transactions WHERE program_id = ${program.id} AND status = 'completed')::int AS tx,
-           (SELECT count(*) FROM members WHERE program_id = ${program.id} AND closing_date IS NOT NULL)::int AS closings`);
-  assert.ok(c.dues > 50 && c.tx > 20 && c.closings > 5, JSON.stringify(c)); // the run really exercised things
+           (SELECT count(*) FROM members WHERE program_id = ${program.id} AND closing_date IS NOT NULL)::int AS closings,
+           (SELECT count(*) FROM member_advances WHERE program_id = ${program.id} AND kind = 'use')::int AS adv_uses,
+           (SELECT count(*) FROM member_advances WHERE program_id = ${program.id} AND kind = 'return')::int AS adv_returns`);
+  assert.ok(c.dues > 50 && c.tx > 20 && c.closings > 5 && c.adv_uses > 5, JSON.stringify(c)); // the run really exercised things
+  console.log("exercised:", JSON.stringify(c));
 });
 
 test("parallel: accepting members while closings are recorded → no due is missed", async () => {

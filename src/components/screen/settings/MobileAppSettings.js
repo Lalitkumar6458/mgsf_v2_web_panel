@@ -6,10 +6,11 @@
 //   • support     — phone / WhatsApp / e-mail / office hours on the app's settings screen
 // Stored on admins.extra.app (lib/appSettings.js).
 import { useEffect, useState } from "react";
-import { App, Button, Input, Switch, Upload, Alert } from "antd";
+import { App, Button, Input, Switch, Upload, Alert, Segmented, Select, InputNumber, Tag } from "antd";
 import { FiSave, FiUpload, FiTrash2, FiSmartphone } from "react-icons/fi";
 import { api } from "@/lib/client/api";
 import { isUpiId } from "@/lib/appSettings";
+import { displayCount, describeCountDisplay } from "@/lib/memberCountDisplay";
 import { useFeature } from "@/lib/AuthProvider";
 
 function Row({ title, desc, children }) {
@@ -36,6 +37,61 @@ const Section = ({ title, desc, children, right }) => (
     {children}
   </div>
 );
+
+/** Settings → Mobile App → "Yojna ki kul sadasya sankhya": who sees it and which number. */
+function MemberCountSection({ s, set, shaped }) {
+  const [programs, setPrograms] = useState([]);
+  useEffect(() => { api.get("/programs").then((r) => setPrograms(r.programs || [])).catch(() => {}); }, []);
+  const mc = s.memberCount;
+  const anyOn = mc.agents || mc.members;
+  const custom = (pid) => mc.custom?.[pid] || { mode: "actual" };
+  const setCustom = (pid, patch) => set("memberCount.custom", { ...(mc.custom || {}), [pid]: { ...custom(pid), ...patch } });
+  // preview of the number the app will show (fixed: from now on; + new members after saving)
+  const shown = (p) => {
+    if (!shaped || mc.source === "actual") return p.totalMembers;
+    if (mc.source === "yojna") return displayCount(p.totalMembers, p.extra?.countDisplay);
+    const c = custom(p.id);
+    return displayCount(p.totalMembers, c.mode === "fixed" ? { ...c, baseActual: c.baseActual ?? p.totalMembers } : c);
+  };
+  return (
+    <Section title="Yojna ki kul sadasya sankhya (app mein)" desc="App ke home par 'योजना के कुल सदस्य' dikhe ya nahi, aur kaun si ginti">
+      <Row title="Agent app mein dikhayein"><Switch checked={mc.agents} onChange={(v) => set("memberCount.agents", v)} /></Row>
+      <Row title="Member app mein dikhayein" desc="Member ko sirf uski apni yojna ki ginti"><Switch checked={mc.members} onChange={(v) => set("memberCount.members", v)} /></Row>
+      {anyOn ? (
+        <>
+          <Row title="Kaun si ginti" desc={shaped ? null : "Percent / fixed ke liye feature-control mein 'Member count display' chalu karein — abhi asli ginti dikhegi"}>
+            <Segmented value={mc.source} onChange={(v) => set("memberCount.source", v)} disabled={!shaped}
+              options={[{ value: "yojna", label: "Yojna jaisa (panel wala)" }, { value: "actual", label: "Asli ginti" }, { value: "custom", label: "App ke liye alag (% / fixed)" }]} />
+          </Row>
+          <div className="mt-2 space-y-2">
+            {programs.map((p) => {
+              const c = custom(p.id);
+              return (
+                <div key={p.id} className="flex flex-wrap items-center gap-3 rounded-lg bg-gray-50 px-3 py-2">
+                  <div className="min-w-[140px] flex-1">
+                    <div className="text-sm font-medium text-gray-900">{p.hiname || p.name}</div>
+                    <div className="text-xs text-gray-500">Asli: {p.totalMembers?.toLocaleString("en-IN")}
+                      {mc.source === "yojna" && shaped ? ` · yojna setting: ${describeCountDisplay(p.extra?.countDisplay)}` : ""}</div>
+                  </div>
+                  {mc.source === "custom" && shaped ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Select size="small" className="w-36" value={c.mode} onChange={(mode) => setCustom(p.id, mode === "percent" ? { mode, percent: c.percent || 100 } : mode === "fixed" ? { mode, fixed: c.fixed ?? p.totalMembers, baseActual: undefined } : { mode })}
+                        options={[{ value: "actual", label: "Asli ginti" }, { value: "percent", label: "Percent (%)" }, { value: "fixed", label: "Fixed ginti se" }]} />
+                      {c.mode === "percent" ? <InputNumber size="small" min={1} max={1000} value={c.percent} onChange={(v) => setCustom(p.id, { percent: v || 100 })} addonAfter="%" className="!w-32" /> : null}
+                      {c.mode === "fixed" ? <InputNumber size="small" min={0} value={c.fixed} onChange={(v) => setCustom(p.id, { fixed: v ?? 0, baseActual: undefined })} className="!w-32" /> : null}
+                    </div>
+                  ) : null}
+                  <Tag color="blue" className="text-sm">App mein: {shown(p)?.toLocaleString("en-IN")}</Tag>
+                </div>
+              );
+            })}
+          </div>
+          {mc.source === "custom" ? <div className="mt-2 text-xs text-gray-500">Fixed: jo ginti likhi wahi abhi dikhegi, uske baad jitne naye member judenge utne badhenge. Percent: asli ginti ka utna %.</div> : null}
+        </>
+      ) : <div className="text-xs text-gray-400">Dono band — app mein kul sadasya sankhya nahi dikhegi.</div>}
+    </Section>
+  );
+}
 
 export default function MobileAppSettings() {
   const { message } = App.useApp();
@@ -107,6 +163,8 @@ export default function MobileAppSettings() {
           <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${agentLoginOn ? "bg-green-50 text-green-700" : "bg-red-50 text-red-600"}`}>{agentLoginOn ? "Chalu" : "Band"}</span>
         </Row>
       </Section>
+
+      <MemberCountSection s={s} set={set} shaped={feature("countDisplay")} />
 
       <Section
         title="Maintenance (रखरखाव)"

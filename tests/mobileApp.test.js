@@ -9,7 +9,7 @@ import { normalizeAppSettings, compareVersions, publicAppStatus } from "../src/l
 import { buildListReport } from "../src/lib/pdf/listReport.js";
 import {
   saveAppSettings, appStatus, paymentInfo, memberFor, memberDetail, family, familyIds,
-  agentOverview, agentMembers, agentClosings, agentClosing, agentBatch, agentRequests,
+  agentOverview, agentMembers, agentClosings, agentClosing, agentBatch, agentRequests, appMemberCount, getAppSettings,
 } from "../src/services/mobileApp.js";
 import { saveTrustFeatures } from "../src/services/features.js";
 
@@ -140,4 +140,36 @@ test("feature control: member / agent login and app payment reach the app", asyn
 
   await saveTrustFeatures(admin.id, { flags: {} });
   assert.deepEqual((await appStatus()).login, { member: true, agent: true, message: "" });
+});
+
+test("member count in the app: off by default, per login type, yojna / asli / % / fixed", async () => {
+  // members on books in this yojna: c1 c2 p1 p2 p3 (accepted / closed) = 5; "req" (rejected) not counted
+  assert.deepEqual(await appMemberCount(agent), { show: false });
+  const base = await getAppSettings(admin.id);
+  await saveAppSettings(admin.id, { ...base, memberCount: { agents: true, members: false, source: "actual" } });
+  assert.deepEqual((await appMemberCount(agent)).programs.map((p) => p.count), [5]);
+  assert.deepEqual(await appMemberCount(memberAuth), { show: false });
+
+  // same as the yojna's own setting (panel)
+  await db.execute(sql`UPDATE programs SET extra = jsonb_build_object('countDisplay', jsonb_build_object('mode', 'percent', 'percent', 200)) WHERE id = ${program.id}`);
+  await saveAppSettings(admin.id, { ...base, memberCount: { agents: true, members: true, source: "yojna" } });
+  assert.equal((await appMemberCount(agent)).programs[0].count, 10);
+  assert.equal((await appMemberCount(memberAuth)).programs[0].count, 10);
+
+  // app's own: percent, then fixed (starts at the number, then + new members)
+  await saveAppSettings(admin.id, { ...base, memberCount: { agents: true, members: true, source: "custom", custom: { [program.id]: { mode: "percent", percent: 60 }, bogus: { mode: "fixed", fixed: 9 } } } });
+  assert.equal((await appMemberCount(agent)).programs[0].count, 3);
+  assert.equal((await getAppSettings(admin.id)).memberCount.custom.bogus, undefined);       // not this trust's yojna
+  await saveAppSettings(admin.id, { ...base, memberCount: { agents: true, members: true, source: "custom", custom: { [program.id]: { mode: "fixed", fixed: 1000 } } } });
+  assert.equal((await appMemberCount(agent)).programs[0].count, 1000);
+  await db.insert(schema.members).values({ id: "new1", programId: program.id, dateJoin: "2026-05-01", status: "accepted", displayName: "N" });
+  assert.equal((await appMemberCount(agent)).programs[0].count, 1001);
+  // saving again with the same number keeps the starting point
+  await saveAppSettings(admin.id, { ...base, memberCount: (await getAppSettings(admin.id)).memberCount });
+  assert.equal((await appMemberCount(agent)).programs[0].count, 1001);
+
+  // "Member count display" switched off for the trust → real count
+  assert.equal((await appMemberCount({ ...agent, features: { countDisplay: false } })).programs[0].count, 6);
+  await db.execute(sql`DELETE FROM members WHERE id = 'new1'`);
+  await saveAppSettings(admin.id, base);
 });

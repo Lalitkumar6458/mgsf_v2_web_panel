@@ -5,8 +5,8 @@ import { saveUpload } from "@/lib/storage.js";
 import { badRequest, forbidden } from "@/lib/errors.js";
 
 export const POST = route(async ({ auth, request }) => {
-  if (auth.role === "member") throw forbidden();
   const { data, folder = "members", name = "photo.jpg" } = await readJson(request);
+  if (auth.role === "member" && folder !== "payments") throw forbidden(); // members: only the payment screenshot
   const b64 = String(data || "").replace(/^data:[^,]+,/, "");
   if (!b64) throw badRequest("फोटो नहीं मिली");
   const buf = Buffer.from(b64, "base64");
