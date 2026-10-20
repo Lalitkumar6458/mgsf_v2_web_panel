@@ -481,6 +481,13 @@ Feature control mein **Excel / CSV import** (`dataImport`). Members page → **I
 
 Deploy: `npm install` (naya package `exceljs`) aur `npm run db:migrate` (0013 fixed rakam, 0014 payment requests, 0015 migration jobs).
 
+## Trust poora delete (Feature control)
+
+`/feature-control` → trust chunein → neeche **"Trust poora delete karein" → Delete…**:
+ginti dikhti hai (yojna, members, dues, payments, logins, files), **Backup download** (poora data JSON, passwords ke bina),
+"photo / documents bhi hatao" (server folder ya bucket), aur admin e-mail likh kar delete. Database ek transaction mein,
+phir files. Owner login sirf trust se alag hota hai, delete nahi. Sirf rokna ho to "Panel band" kaafi hai.
+
 ## Aage ka kaam (phases)
 
 - [x] **Phase 1:** database, business logic, API, Firestore migration, Docker deploy, tests

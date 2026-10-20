@@ -3,10 +3,10 @@
 // Not linked from anywhere. Needs CONTROL_KEY from the server .env — without it the API answers
 // 404 and this page shows a plain "not found".
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { App, Button, Input, Switch, Tag, Tooltip, Empty, Spin, Popconfirm, DatePicker, InputNumber } from "antd";
+import { App, Button, Checkbox, Input, Modal, Switch, Tag, Tooltip, Empty, Spin, Popconfirm, DatePicker, InputNumber } from "antd";
 import dayjs from "dayjs";
 import {
-  FiLock, FiLogOut, FiSearch, FiCheck, FiRotateCcw, FiPower, FiMonitor, FiZap, FiLogIn, FiUsers, FiAlertTriangle, FiCalendar, FiFileText, FiPhone, FiCopy, FiAward, FiShield, FiMessageCircle, FiSmartphone, FiDatabase,
+  FiLock, FiLogOut, FiSearch, FiCheck, FiRotateCcw, FiPower, FiMonitor, FiZap, FiLogIn, FiUsers, FiAlertTriangle, FiCalendar, FiFileText, FiPhone, FiCopy, FiAward, FiShield, FiMessageCircle, FiSmartphone, FiDatabase, FiTrash2, FiDownload,
 } from "react-icons/fi";
 import {
   FEATURE_GROUPS, FEATURE_KEYS, FEATURE_PRESETS, presetFlags, normalizeFeatures, normalizeSupport, DEFAULT_BLOCK_MESSAGE, planState,
@@ -324,6 +324,8 @@ export default function FeatureControlPage() {
                 );
               })}
 
+              <DangerZone key={sel.id} trust={sel} onDeleted={() => { setSelId(null); load(); }} onAuth={() => setState("key")} />
+
               <div className="fc-foot-space" />
               <footer className={`fc-foot ${dirty ? "is-dirty" : ""}`}>
                 <div className="fc-muted">
@@ -348,7 +350,82 @@ export default function FeatureControlPage() {
   );
 }
 
+// ─── Delete a trust completely ─────────────────────────────────────────────────
+function DangerZone({ trust, onDeleted, onAuth }) {
+  const { message } = App.useApp();
+  const [info, setInfo] = useState(null);
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState("");
+  const [files, setFiles] = useState(true);
+  const [backedUp, setBackedUp] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const show = async () => {
+    setBusy(true);
+    try { setInfo(await call("GET", `/trusts/${trust.id}/delete`)); setText(""); setBackedUp(false); setFiles(true); setOpen(true); }
+    catch (e) { if (e.status === 401) onAuth(); message.error(e.message); }
+    setBusy(false);
+  };
+  const run = async () => {
+    setBusy(true);
+    try {
+      const r = await call("POST", `/trusts/${trust.id}/delete`, { confirm: text, deleteFiles: files });
+      const n = Object.values(r.removed || {}).reduce((a, b) => a + b, 0);
+      message.success(`Trust delete ho gaya — ${n.toLocaleString("en-IN")} rows, ${r.files.removed}/${r.files.total} files hataye${r.files.failed ? ` (${r.files.failed} files nahi hati)` : ""}`, 8);
+      setOpen(false); onDeleted();
+    } catch (e) { if (e.status === 401) onAuth(); message.error(e.message); }
+    setBusy(false);
+  };
+  const inr = (n) => `₹${Math.round(Number(n) || 0).toLocaleString("en-IN")}`;
+  return (
+    <section className="fc-card fc-danger">
+      <div className="fc-power-row">
+        <div className="fc-power-icon"><FiTrash2 /></div>
+        <div className="fc-row-text">
+          <div className="fc-row-title">Trust poora delete karein</div>
+          <div className="fc-row-desc">Yojna, members, dues, payments, rasid, agents, commission, logins, WhatsApp — aur saari photo / documents. Wapas nahi aata. Sirf band karna ho to upar &quot;Panel band&quot; karein.</div>
+        </div>
+        <Button danger icon={<FiTrash2 />} loading={busy && !open} onClick={show}>Delete…</Button>
+      </div>
+      <Modal open={open} onCancel={() => setOpen(false)} destroyOnClose width={560}
+        title={<span style={{ color: "#dc2626" }}>“{info?.name}” poora delete karein?</span>}
+        okText="Haan, hamesha ke liye delete" okButtonProps={{ danger: true, loading: busy, disabled: !text.trim() }} onOk={run}>
+        {info ? (
+          <div className="fc-del">
+            <div className="fc-del-grid">
+              {Object.entries(info.counts).map(([k, n]) => (
+                <div key={k}><b>{n.toLocaleString("en-IN")}</b><span>{info.labels[k] || k}</span></div>
+              ))}
+              <div><b>{info.files.toLocaleString("en-IN")}</b><span>Photo / document</span></div>
+            </div>
+            <div className="fc-muted">Kul jama: {inr(info.collected)} · aakhri payment: {fmtDate(info.lastPayment)} · aakhri login: {fmtDate(info.lastLogin)}</div>
+            <div className="fc-del-step">
+              <b>1.</b> Pehle backup lein (sab data JSON mein, passwords ke bina):
+              <a href={`/api/control/trusts/${trust.id}/delete?backup=1`} onClick={() => setBackedUp(true)}>
+                <Button size="small" icon={<FiDownload />}>Backup download</Button>
+              </a>
+              {backedUp ? <Tag color="green">liya</Tag> : null}
+            </div>
+            <Checkbox checked={files} onChange={(e) => setFiles(e.target.checked)}>
+              Photo / documents bhi storage se hatao ({info.files} files · {info.storage === "local" ? "server folder" : "bucket"})
+            </Checkbox>
+            <div className="fc-del-step"><b>2.</b> Pakka karne ke liye admin e-mail likhein: <code>{info.email || info.id}</code></div>
+            <Input value={text} onChange={(e) => setText(e.target.value)} placeholder={info.email || info.id} onPressEnter={() => text.trim() && run()} />
+          </div>
+        ) : null}
+      </Modal>
+    </section>
+  );
+}
+
 const CSS = `
+.fc-danger { border-color: #fecaca; background: #fff7f7; }
+.fc-danger .fc-power-icon { background: #fee2e2; color: #dc2626; }
+.fc-del { display: flex; flex-direction: column; gap: 12px; font-size: 13px; }
+.fc-del-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.fc-del-grid div { border: 1px solid #e5e7eb; border-radius: 8px; padding: 6px 8px; background: #f9fafb; display: flex; flex-direction: column; }
+.fc-del-grid b { font-size: 16px; } .fc-del-grid span { font-size: 11px; color: #6b7280; }
+.fc-del-step { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+@media (max-width: 560px) { .fc-del-grid { grid-template-columns: repeat(2, 1fr); } }
 .fc, .fc-center { min-height: 100vh; background: #f4f5f7; color: #16181d; font-family: var(--font-geist-sans), system-ui, sans-serif; }
 .fc-center { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 16px; }
 .fc-404 h1 { font-size: 28px; font-weight: 600; } .fc-404 p { color: #6b7280; }
