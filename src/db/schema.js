@@ -559,3 +559,26 @@ export const paymentRequests = pgTable("payment_requests", {
   index("payreq_account_idx").on(t.requestedByAccountId, t.createdAt),
   index("payreq_reference_idx").on(t.adminId, t.reference),
 ]);
+
+// Data migration / Excel import runs (drizzle/0015_migration_jobs.sql) — see services/migration/jobs.js
+export const migrationJobs = pgTable("migration_jobs", {
+  id: id(),
+  kind: text("kind").notNull(),                 // mgsf | trustNew | excel
+  sourceProject: str("source_project"),
+  sourceTrustId: str("source_trust_id"),
+  sourceTrustName: str("source_trust_name"),
+  targetAdminId: text("target_admin_id"),
+  mode: text("mode").notNull().default("new"),  // new | replace | append (excel)
+  dryRun: boolean("dry_run").notNull().default(false),
+  options: json("options", {}),
+  status: text("status").notNull().default("queued"), // queued | running | done | failed | cancelled
+  steps: json("steps", []),
+  log: json("log", []),
+  report: json("report", {}),
+  error: str("error"),
+  loginsEnc: text("logins_enc"),
+  createdBy: str("created_by"),
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+  updatedAt: updatedAt(),
+}, (t) => [index("migration_jobs_started_idx").on(t.startedAt)]);

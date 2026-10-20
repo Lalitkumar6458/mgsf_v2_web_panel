@@ -456,6 +456,31 @@ Member (apne aur family ke liye) ya agent (apne member ke liye) trust ke UPI QR 
 - **Data:** table `payment_requests` (migration 0014). Isme `items` aur `result` dono jsonb hain.
 - **Code:** `src/services/paymentRequests.js`. **Tests:** `tests/payment-requests.test.js`.
 
+## Data migration — purane Firebase project se (Feature control → "Data migration")
+
+Do purane app ka poora data is panel mein: **MGSF purana app** (`users/{uid}/programs/...`) aur **naya trust app** (`trusts/{id}/...`).
+
+1. `/feature-control` mein login → **Data migration**. Source chunein, Firebase **service-account JSON** daalein (ya JSON backup).
+   Key sirf server memory mein 3 ghante rehti hai — DB / disk par kabhi save nahi hoti.
+2. Trust list aati hai → trust chunein → admin e-mail / password, "photo + documents copy", "pehle wala hata kar dobara" (replace).
+3. **Dry run** pehle: kuch likha nahi jaata, sirf ginti + paisa + jaanch dikhti hai. Phir **Migrate**.
+4. Live progress: read → check → write (ek hi DB transaction, sab ya kuch nahi) → files → verify (har due ka jama = uske transactions ka jod, rule check).
+   Members, yojna, agents, closing groups, dues, transactions/rasid, join fee kist, **agent commission + payout** sab aate hain.
+5. Naye logins ke passwords ka CSV (encrypted rakha) — download karke "Passwords delete" dabayein.
+
+Ek hi Firebase data do alag trust id mein nahi jaata (refuse). Doosre trust ka same login / rasid no. ho to login chhod diya jaata hai (report), rasid no. ke aage `-TAG` lagta hai.
+
+## Excel / CSV import (Members page → "Import")
+
+Feature control mein **Excel / CSV import** (`dataImport`). Members page → **Import**:
+
+- **Sample Excel** (Members + Payments + Help sheet, yojna ke agents / groups ke naam ke saath) ya alag CSV. "उदाहरण" wali lines import nahi hoti.
+- File daalte hi **jaanch**: har line ki galti (naam, tareekh DD-MM-YYYY, agent, double Reg. No. / Aadhaar, closed bina closing date, payment jo banta nahi…). Kuch save nahi hota.
+- **Import** background mein, live progress: members (reg. no., login, dues, join fee + commission) → purani closings tareekh ke kram se (har payer ke dues) → payments (jama, rasid, commission). Sab normal services se — haath se daale data jaisa hi.
+- Result: kitne bane, kaunsi line nahi hui aur kyon, naye passwords CSV, aur **Undo import** (import ke baad alag payment na hua ho to sab hata deta hai).
+
+Deploy: `npm install` (naya package `exceljs`) aur `npm run db:migrate` (0013 fixed rakam, 0014 payment requests, 0015 migration jobs).
+
 ## Aage ka kaam (phases)
 
 - [x] **Phase 1:** database, business logic, API, Firestore migration, Docker deploy, tests

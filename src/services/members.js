@@ -62,7 +62,7 @@ export async function nextApplicationNumber(programId) {
 }
 
 /** Give an accepted member a registration number, member number and login account (inside tx). */
-async function activate(tx, memberId, { password: chosenPassword } = {}) {
+export async function activate(tx, memberId, { password: chosenPassword } = {}) {
   const { rows: [m] } = await tx.execute(sql`SELECT * FROM members WHERE id = ${memberId} FOR UPDATE`);
   const { rows: [p] } = await tx.execute(sql`SELECT * FROM programs WHERE id = ${m.program_id} FOR UPDATE`);
 

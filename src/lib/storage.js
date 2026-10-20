@@ -25,11 +25,11 @@ async function s3Client() {
   return s3;
 }
 
-/** Save a web File; returns its public URL. */
-export async function saveUpload(file, folder) {
+/** Save a web File; returns its public URL. (maxBytes: the data migration copies bigger old files) */
+export async function saveUpload(file, folder, { maxBytes = MAX_BYTES } = {}) {
   const ext = TYPES[file.type];
   if (!ext) throw badRequest("Only JPG, PNG, WEBP, GIF or PDF allowed");
-  if (file.size > MAX_BYTES) throw badRequest(`File too large (max ${MAX_BYTES / 1048576} MB)`);
+  if (file.size > maxBytes) throw badRequest(`File too large (max ${maxBytes / 1048576} MB)`);
   const key = `${folder}/${randomUUID()}.${ext}`.replace(/\/+/g, "/");
   const data = Buffer.from(await file.arrayBuffer());
 

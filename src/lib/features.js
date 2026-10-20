@@ -44,6 +44,7 @@ export const EXTRA_FEATURES = [
   { group: "members", key: "duplicateCheck", label: "Duplicate member check", hi: "दोहरा सदस्य जाँच", desc: "Wahi Aadhaar / mobile / naam pehle se ho to warning",
     api: [/^\/members\/duplicates$/] },
   { group: "members", key: "aadhaarMask", label: "Aadhaar chhupa (XXXX 1234)", hi: "आधार मास्क", desc: "List / detail mein Aadhaar ke sirf aakhri 4 ank" },
+  { group: "members", key: "dataImport", label: "Excel / CSV import", hi: "एक्सेल इम्पोर्ट", desc: "Members page → Import: Excel / CSV se sadasya, purani closing aur jama payment ek saath (sample file, jaanch, live progress, undo)", api: [/^\/programs\/[^/]+\/import(\/|$)/] },
   { group: "members", key: "blankForm", label: "Khaali registration form", hi: "खाली फॉर्म", desc: "Print karke haath se bharne wala form" },
   { group: "members", key: "countDisplay", label: "Member count display", hi: "सदस्य संख्या", desc: "Yojna mein percent / fixed count dikhane ka option" },
   // hisaab + suraksha
@@ -194,7 +195,7 @@ export const FEATURE_PRESETS = [
   { key: "basic", label: "Basic", desc: "Sirf members, yojna, payments, closing",
     off: ["reports", "commission", "users", "certificateBuilder", "theme", "receipts", "rasidDesign", "upiQr", "verifyQr", "paymentPdf", "exports",
       "emailSend", "countDisplay", "memberLogin", "cashHandover", "auditLog", "whatsapp", "duplicateCheck", "blankForm", "appPayment",
-      "appNotifications", "appLogins", "whatsappApi", "advancePayment", "fixedLimit", "paymentRequests"] },
+      "appNotifications", "appLogins", "whatsappApi", "advancePayment", "fixedLimit", "paymentRequests", "dataImport"] },
 ];
 
 export function presetFlags(presetKey) {

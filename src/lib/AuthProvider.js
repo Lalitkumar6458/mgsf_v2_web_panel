@@ -30,7 +30,7 @@ function toUser(me) {
 }
 
 // the developer's /feature-control page never shows a trust's "panel band" screen
-const isControlPage = () => typeof window !== "undefined" && window.location.pathname.startsWith("/feature-control");
+const isControlPage = () => typeof window !== "undefined" && /^\/(feature-control|data-migration)/.test(window.location.pathname);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);

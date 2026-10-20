@@ -180,7 +180,7 @@ export default function CustomDashboardLayout({ children }) {
   const agentStatusChanged = useSelector((state) => state.data.getAgentDataChange);
   const memberStatusChanged = useSelector((state) => state.data.getMemberDataChange);
 
-  const withoutLayout = ["/auth/login", "/feature-control"];
+  const withoutLayout = ["/auth/login", "/feature-control", "/data-migration"];
   // public pages (no login, no panel around them): QR verify for receipts / certificates
   const bare = withoutLayout.includes(pathname) || pathname.startsWith("/verify/");
 

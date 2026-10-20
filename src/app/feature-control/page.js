@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { App, Button, Input, Switch, Tag, Tooltip, Empty, Spin, Popconfirm, DatePicker, InputNumber } from "antd";
 import dayjs from "dayjs";
 import {
-  FiLock, FiLogOut, FiSearch, FiCheck, FiRotateCcw, FiPower, FiMonitor, FiZap, FiLogIn, FiUsers, FiAlertTriangle, FiCalendar, FiFileText, FiPhone, FiCopy, FiAward, FiShield, FiMessageCircle, FiSmartphone,
+  FiLock, FiLogOut, FiSearch, FiCheck, FiRotateCcw, FiPower, FiMonitor, FiZap, FiLogIn, FiUsers, FiAlertTriangle, FiCalendar, FiFileText, FiPhone, FiCopy, FiAward, FiShield, FiMessageCircle, FiSmartphone, FiDatabase,
 } from "react-icons/fi";
 import {
   FEATURE_GROUPS, FEATURE_KEYS, FEATURE_PRESETS, presetFlags, normalizeFeatures, normalizeSupport, DEFAULT_BLOCK_MESSAGE, planState,
@@ -170,6 +170,7 @@ export default function FeatureControlPage() {
         <div className="fc-brand"><span className="fc-dot" /> Feature Control</div>
         <div className="fc-top-right">
           <span className="fc-muted">{trusts.length} trust</span>
+          <a href="/data-migration"><Button icon={<FiDatabase />}>Data migration</Button></a>
           <Button icon={<FiLogOut />} onClick={logout}>Bahar</Button>
         </div>
       </header>

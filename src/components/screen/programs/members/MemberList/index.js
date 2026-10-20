@@ -19,7 +19,7 @@ import {
 } from 'antd';
 import {
     FiSearch, FiDownload, FiFileText, FiPrinter, FiColumns, FiSliders, FiX, FiRefreshCw,
-    FiAward, FiCreditCard, FiUsers, FiAlertCircle, FiChevronDown, FiLock
+    FiAward, FiCreditCard, FiUsers, FiAlertCircle, FiChevronDown, FiLock, FiUpload
 } from 'react-icons/fi';
 import { MdOutlinePendingActions } from 'react-icons/md';
 import { GrCertificate } from 'react-icons/gr';
@@ -46,6 +46,7 @@ import { FixedLimitModal, FixedLimitTag, useFixedLimitOn } from '@/components/co
 import { amountsHidden, useAmountsHidden, MASK, AmountsEye } from "@/lib/client/privacy";
 
 const MemberPdfExportDrawer = dynamic(() => import('./MemberPdfExportDrawer'), { ssr: false });
+const ImportDrawer = dynamic(() => import('@/components/common/excelImport/ImportDrawer'), { ssr: false });
 
 dayjs.extend(customParseFormat);
 const { RangePicker } = DatePicker;
@@ -131,6 +132,7 @@ const MemberList = () => {
     const [loadingReport,        setLoadingReport]        = useState(false);
 
     const [isExportOpen,         setIsExportOpen]         = useState(false);   // print view
+    const [importOpen,           setImportOpen]           = useState(false);   // Excel / CSV import
     const [isPdfOpen,            setIsPdfOpen]            = useState(false);   // real PDF
     const [limitOpen,            setLimitOpen]            = useState(false);   // fixed rakam (bulk)
     const [JoinFeesMemberListOpen, setJoinFeesMemberListOpen] = useState(false);
@@ -599,6 +601,9 @@ const MemberList = () => {
                     <p className="mm-sub">{selectedProgram?.name || '—'} · {isLoading && !allMembersData.length ? 'loading members…' : `${counts.all.toLocaleString('en-IN')} members on books`}{counts.pending ? ` · ${counts.pending} requests waiting` : ''}</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
+                    {feature('dataImport') && can('members', 'add') && <Tooltip title="Excel / CSV se sadasya, purani closing aur payment ek saath">
+                        <Button icon={<FiUpload />} disabled={!selectedProgram?.id} onClick={() => setImportOpen(true)}>Import</Button>
+                    </Tooltip>}
                     <Button icon={<FiCreditCard />} onClick={() => setJoinFeesMemberListOpen(true)}>Join fees list</Button>
                     {feature('blankForm') && <Tooltip title="Khaali registration form — print karke gaon mein haath se bharwayein">
                         <Button icon={<FiPrinter />} onClick={() => setBlankFormOpen(true)}>Khaali form</Button>
@@ -772,6 +777,10 @@ const MemberList = () => {
             </div>
 
             {/* ── Exports ──────────────────────────────────────────────────── */}
+            {importOpen && (
+                <ImportDrawer open={importOpen} programId={selectedProgram?.id} programName={selectedProgram?.name}
+                    onClose={() => setImportOpen(false)} onDone={() => onGridReady()} />
+            )}
             {limitOpen && (
                 <FixedLimitModal open={limitOpen} programId={selectedProgram?.id} members={selectedRows}
                     onClose={() => setLimitOpen(false)} onDone={() => onGridReady()} />
