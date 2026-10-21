@@ -138,6 +138,8 @@ const { message, modal } = App.useApp();
       const data = await api.patch(`/agents/${selectedAgent.id}`, { password: newPassword });
       if (data.success !== false) {
         message.success(`पासवर्ड सफलतापूर्वक बदल दिया गया! नया पासवर्ड: ${newPassword}`, 10);
+        setSelectedAgent((cur) => (cur ? { ...cur, password: newPassword, passwordBy: 'office' } : cur));
+        dispatch(setgetAgentDataChange(true));
         setPasswordModalVisible(false);
         setNewPassword('');
       } else {
@@ -145,7 +147,7 @@ const { message, modal } = App.useApp();
       }
     } catch (error) {
       console.error('Password change error:', error);
-      message.error('पासवर्ड बदलने में विफल');
+      message.error(error?.message || 'पासवर्ड बदलने में विफल');
     } finally {
       setChangingPassword(false);
     }

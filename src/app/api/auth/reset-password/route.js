@@ -4,6 +4,7 @@ import { route, readJson } from "@/lib/http.js";
 import { verifyOtp } from "@/lib/otp.js";
 import { hashPassword } from "@/lib/auth.js";
 import { badRequest } from "@/lib/errors.js";
+import { forgetAgentPassword } from "@/services/agents.js";
 
 /** POST { email, otp, newPassword } — set a new password with the e-mailed OTP; logs out all devices. */
 export const POST = route(async ({ request }) => {
@@ -15,5 +16,6 @@ export const POST = route(async ({ request }) => {
   await verifyOtp(e, otp, "reset");
   await db.update(schema.accounts).set({ passwordHash: await hashPassword(newPassword) }).where(eq(schema.accounts.id, acc.id));
   await db.update(schema.sessions).set({ revokedAt: new Date() }).where(eq(schema.sessions.accountId, acc.id));
+  if (acc.agentId) await forgetAgentPassword(acc.agentId, "agent");
   return { success: true };
 }, { auth: false });

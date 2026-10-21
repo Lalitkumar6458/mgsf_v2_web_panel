@@ -13,6 +13,16 @@ const { TabPane } = Tabs;
 const { Search } = Input;
 const { Title, Text } = Typography;
 const { Option } = Select;
+function PasswordReveal({ value }) {
+  const [show, setShow] = React.useState(false);
+  return (
+    <span className="inline-flex items-center gap-2">
+      <Typography.Text code copyable={{ text: value }}>{show ? value : '••••••••'}</Typography.Text>
+      <Button size="small" type="link" onClick={() => setShow((v) => !v)}>{show ? 'Chhupao' : 'Dikhao'}</Button>
+    </span>
+  );
+}
+
 const AgentDetails = ({selectedAgent,isViewModalVisible,setIsViewModalVisible}) => {
 
       const renderAgentInfo = () => (
@@ -57,7 +67,12 @@ const AgentDetails = ({selectedAgent,isViewModalVisible,setIsViewModalVisible}) 
               <Descriptions.Item label="Email">{selectedAgent.email}</Descriptions.Item>
               <Descriptions.Item label="Phone">{selectedAgent.phone}</Descriptions.Item>
               <Descriptions.Item label="Joining Date">{selectedAgent.dateJoin}</Descriptions.Item>
-              <Descriptions.Item label="Agent Password">{selectedAgent.password || ""}</Descriptions.Item>
+              <Descriptions.Item label="Login (e-mail)"><Typography.Text copyable>{selectedAgent.email}</Typography.Text></Descriptions.Item>
+              <Descriptions.Item label="Password">
+                {selectedAgent.password
+                  ? <PasswordReveal value={selectedAgent.password} />
+                  : <span className="text-xs text-gray-500">{selectedAgent.passwordBy === 'agent' ? 'Agent ne khud badla — ' : 'Pata nahi — '}&quot;Change Password&quot; se naya set karein, phir yahan dikhega</span>}
+              </Descriptions.Item>
 
             </Descriptions>
             

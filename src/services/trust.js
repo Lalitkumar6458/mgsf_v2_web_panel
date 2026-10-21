@@ -4,6 +4,7 @@ import { eq, asc } from "drizzle-orm";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { db, schema } from "../db/index.js";
+import { badRequest, notFound } from "../lib/errors.js";
 import { readLocalUpload } from "../lib/storage.js";
 import { normalizeTrust, pickTrustInput, TRUST_IMAGE_FIELDS } from "../lib/trust/profile.js";
 
@@ -75,9 +76,27 @@ export async function updateTrustInfo(adminId, body, byAccountId) {
   return next;
 }
 
-/** Branding shown before login (the panel serves one trust; with several, the oldest one). */
-export async function publicBranding() {
-  const row = await db.query.admins.findFirst({ orderBy: [asc(schema.admins.createdAt)] });
+/** host of a request (Caddy / proxy sends the real one) — "admin.trust.in" */
+export const requestHost = (request) => String(request?.headers?.get("x-forwarded-host") || request?.headers?.get("host") || "")
+  .split(",")[0].trim().toLowerCase().replace(/:\d+$/, "");
+export const normDomain = (d) => String(d || "").trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "").replace(/:\d+$/, "");
+
+/**
+ * Which trust a visitor sees BEFORE login (login page, mobile app welcome).
+ * 1. the trust whose "login page domain" (Feature control) is this host
+ * 2. else the trust marked as default, else the oldest one.
+ */
+export async function brandingAdmin(host) {
+  const rows = await db.query.admins.findMany({ orderBy: [asc(schema.admins.createdAt)] });
+  if (!rows.length) return null;
+  const h = normDomain(host);
+  const domainsOf = (r) => (Array.isArray(r.extra?.loginDomains) ? r.extra.loginDomains.map(normDomain) : []);
+  return (h && rows.find((r) => domainsOf(r).includes(h))) || rows.find((r) => r.extra?.loginDefault === true) || rows[0];
+}
+
+/** Branding shown before login (by domain — see brandingAdmin). */
+export async function publicBranding(host) {
+  const row = await brandingAdmin(host);
   const t = normalizeTrust(row?.trustInfo);
   const raw = row?.trustInfo || {};
   return {
@@ -87,4 +106,22 @@ export async function publicBranding() {
     // only an uploaded logo is sent; the built-in one is already in the page bundle
     logo: raw.logo && !String(raw.logo).startsWith("data:") ? raw.logo : null,
   };
+}
+
+/** Feature control: set the login-page domains of one trust (each domain belongs to one trust only). */
+export async function setLoginDomains(adminId, { domains = [], isDefault } = {}) {
+  const list = [...new Set((Array.isArray(domains) ? domains : String(domains).split(/[\s,]+/)).map(normDomain).filter(Boolean))].slice(0, 10);
+  for (const d of list) if (!/^[a-z0-9.-]+\.[a-z]{2,}$/.test(d)) throw badRequest(`Domain galat: ${d}`);
+  const rows = await db.query.admins.findMany();
+  const me = rows.find((r) => r.id === adminId);
+  if (!me) throw notFound("Trust nahi mila");
+  for (const r of rows) {
+    if (r.id === adminId) continue;
+    const clash = (Array.isArray(r.extra?.loginDomains) ? r.extra.loginDomains.map(normDomain) : []).find((d) => list.includes(d));
+    if (clash) throw badRequest(`${clash} pehle se "${r.trustInfo?.name || r.displayName || r.email}" ka hai`);
+  }
+  if (isDefault === true) for (const r of rows) if (r.id !== adminId && r.extra?.loginDefault) await db.update(schema.admins).set({ extra: { ...r.extra, loginDefault: false } }).where(eq(schema.admins.id, r.id));
+  const extra = { ...(me.extra || {}), loginDomains: list, ...(isDefault === undefined ? {} : { loginDefault: !!isDefault }) };
+  await db.update(schema.admins).set({ extra }).where(eq(schema.admins.id, adminId));
+  return { loginDomains: list, loginDefault: !!extra.loginDefault };
 }

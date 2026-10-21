@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { App, Button, Checkbox, Input, Modal, Switch, Tag, Tooltip, Empty, Spin, Popconfirm, DatePicker, InputNumber } from "antd";
 import dayjs from "dayjs";
 import {
-  FiLock, FiLogOut, FiSearch, FiCheck, FiRotateCcw, FiPower, FiMonitor, FiZap, FiLogIn, FiUsers, FiAlertTriangle, FiCalendar, FiFileText, FiPhone, FiCopy, FiAward, FiShield, FiMessageCircle, FiSmartphone, FiDatabase, FiTrash2, FiDownload,
+  FiLock, FiLogOut, FiSearch, FiCheck, FiRotateCcw, FiPower, FiMonitor, FiZap, FiLogIn, FiUsers, FiAlertTriangle, FiCalendar, FiFileText, FiPhone, FiCopy, FiAward, FiShield, FiMessageCircle, FiSmartphone, FiDatabase, FiTrash2, FiDownload, FiGlobe,
 } from "react-icons/fi";
 import {
   FEATURE_GROUPS, FEATURE_KEYS, FEATURE_PRESETS, presetFlags, normalizeFeatures, normalizeSupport, DEFAULT_BLOCK_MESSAGE, planState,
@@ -220,6 +220,8 @@ export default function FeatureControlPage() {
                 </div>
               </section>
 
+              <LoginDomain key={`ld-${sel.id}`} trust={sel} onSaved={(v) => setTrusts((list) => list.map((t) => (t.id === sel.id ? { ...t, ...v } : v.loginDefault ? { ...t, loginDefault: false } : t)))} onAuth={() => setState("key")} />
+
               {/* panel on / off */}
               <section className={`fc-card fc-power ${draft.active ? "" : "is-off"}`}>
                 <div className="fc-power-row">
@@ -347,6 +349,39 @@ export default function FeatureControlPage() {
         </main>
       </div>
     </div>
+  );
+}
+
+// ─── Login page domain → which trust's name / logo shows before login ─────────
+function LoginDomain({ trust, onSaved, onAuth }) {
+  const { message } = App.useApp();
+  const [text, setText] = useState((trust.loginDomains || []).join(", "));
+  const [def, setDef] = useState(!!trust.loginDefault);
+  const [busy, setBusy] = useState(false);
+  const here = typeof window !== "undefined" ? window.location.hostname : "";
+  const changed = text !== (trust.loginDomains || []).join(", ") || def !== !!trust.loginDefault;
+  const save = async () => {
+    setBusy(true);
+    try {
+      const r = await call("PUT", `/trusts/${trust.id}/login-domain`, { domains: text, isDefault: def });
+      setText(r.loginDomains.join(", ")); onSaved(r);
+      message.success("Save — login page ab is domain par is trust ka naam / logo dikhayega");
+    } catch (e) { if (e.status === 401) onAuth(); message.error(e.message); }
+    setBusy(false);
+  };
+  return (
+    <section className="fc-card">
+      <div className="fc-card-head"><div className="fc-card-title"><FiGlobe /> Login page domain</div></div>
+      <div className="fc-row-desc" style={{ marginBottom: 10 }}>
+        Ek server par kai trust ho to login page (aur app ki pehli screen) par kis domain par kaun sa naam / logo dikhe. Khaali = &quot;default&quot; trust ya sabse purana.
+      </div>
+      <div className="fc-plan-ctrls">
+        <Input style={{ maxWidth: 420 }} placeholder="admin.trust.in, srv123.hstgr.cloud" value={text} onChange={(e) => setText(e.target.value)} onPressEnter={save} />
+        {here && !text.includes(here) ? <Button size="small" type="dashed" onClick={() => setText((t) => (t.trim() ? `${t.trim()}, ${here}` : here))}>+ {here}</Button> : null}
+        <Checkbox checked={def} onChange={(e) => setDef(e.target.checked)}>Default trust (koi domain match na ho to)</Checkbox>
+        <Button type="primary" size="small" loading={busy} disabled={!changed} onClick={save}>Save</Button>
+      </div>
+    </section>
   );
 }
 

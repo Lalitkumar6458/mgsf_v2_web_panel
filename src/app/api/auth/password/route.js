@@ -3,6 +3,7 @@ import { db, schema } from "@/db/index.js";
 import { route, readJson } from "@/lib/http.js";
 import { verifyPassword, hashPassword } from "@/lib/auth.js";
 import { badRequest } from "@/lib/errors.js";
+import { forgetAgentPassword } from "@/services/agents.js";
 
 /** POST { oldPassword, newPassword, logoutOthers? } */
 export const POST = route(async ({ request, auth }) => {
@@ -11,6 +12,7 @@ export const POST = route(async ({ request, auth }) => {
   const acc = await db.query.accounts.findFirst({ where: eq(schema.accounts.id, auth.accountId) });
   if (!(await verifyPassword(oldPassword, acc.passwordHash))) throw badRequest("Old password is wrong");
   await db.update(schema.accounts).set({ passwordHash: await hashPassword(newPassword) }).where(eq(schema.accounts.id, acc.id));
+  if (acc.agentId) await forgetAgentPassword(acc.agentId, "agent"); // office no longer knows it
   if (logoutOthers) {
     await db.update(schema.sessions).set({ revokedAt: new Date() })
       .where(and(eq(schema.sessions.accountId, acc.id), ne(schema.sessions.id, auth.sessionId)));

@@ -6,7 +6,7 @@ import { getAgent, updateAgent, deleteAgent } from "@/services/agents.js";
 export const GET = route(async ({ auth, params }) => {
   if (auth.role === "agent" && auth.agentId !== params.agentId) throw forbidden();
   if (auth.role === "member") throw forbidden();
-  return { agent: await getAgent(auth.adminId, params.agentId) };
+  return { agent: await getAgent(auth.adminId, params.agentId, { viewer: ["admin", "owner"].includes(auth.role) ? "admin" : "agent" }) };
 });
 
 /** PATCH { …fields, password?, active? } */

@@ -35,7 +35,7 @@ export async function saveTrustFeatures(adminId, input, by = "control") {
 export async function listTrustFeatures() {
   const { rows } = await db.execute(sql`
     SELECT ad.id, ad.display_name, ad.email, ad.phone, ad.created_at, ad.trust_info->>'name' AS trust_name,
-      ad.extra->'features' AS features,
+      ad.extra->'features' AS features, ad.extra->'loginDomains' AS login_domains, (ad.extra->>'loginDefault')::boolean AS login_default,
       (SELECT max(last_login_at) FROM accounts a WHERE a.admin_id = ad.id AND a.role = 'admin') AS last_login_at,
       (SELECT count(*) FROM programs p WHERE p.admin_id = ad.id)::int AS programs,
       (SELECT count(*) FROM members m JOIN programs p ON p.id = m.program_id WHERE p.admin_id = ad.id AND NOT m.deleted)::int AS members,
@@ -53,6 +53,8 @@ export async function listTrustFeatures() {
     members: r.members,
     agents: r.agents,
     features: normalizeFeatures(r.features),
+    loginDomains: Array.isArray(r.login_domains) ? r.login_domains : [],
+    loginDefault: !!r.login_default,
   }));
 }
 
